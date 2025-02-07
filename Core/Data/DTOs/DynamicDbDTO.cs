@@ -39,6 +39,7 @@ namespace Core.Data.DTOs
 
     public class ColumnDto
     {
+        public string TableName { get; set; }
         public string ColumnName { get; set; }
         public string DataType { get; set; }
         public string IsNullable { get; set; }
@@ -46,27 +47,13 @@ namespace Core.Data.DTOs
         //public int? NUMERIC_PRECISION { get; set; }
         //public int? NUMERIC_SCALE { get; set; }
     }
-    //public class DataDto
-    //{
-    //    public object DataName { get; set; }
-    //    public class DatabaseWithTablesDto
-    //    {
-    //        public string DbName { get; set; }
-    //        public List<TableWithColumnsDto> Tables { get; set; }
-    //    }
-
-    //public class TableWithColumnsDto
-    //{
-    //    public string TableName { get; set; }
-    //    public List<ColumnWithDataDto> Columns { get; set; }
-    //}
-
-    //    public class ColumnWithDataDto
-    //    {
-    //        public string ColumnName { get; set; }
-    //        public List<object> Data { get; set; }  // Using 'object' to support different types of column data
-    //    }
-
+   public class DatabaseSummaryDto
+    {
+        public string DbName { get; set; }
+        public List<string>? Tables { get; set; }
+        public List<string>? Procedures { get; set; }
+        public List<string>? Views { get; set; }
+    }
     public class ProcedureDetailsDto
     {
         public string ProcedureName { get; set; }

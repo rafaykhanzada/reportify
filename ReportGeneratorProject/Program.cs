@@ -42,7 +42,7 @@ builder.Services.AddScoped<IDynamicDbContextService, DynamicDbContextService>();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-builder.WebHost.UseUrls("http://192.168.26.98:5001/");
+//builder.WebHost.UseUrls("http://192.168.26.98:5001/");
 //builder.WebHost.UseUrls("http://192.168.100.3:5001/");
 //builder.WebHost.UseUrls("http://192.168.19.91:5001/");
 var app = builder.Build();

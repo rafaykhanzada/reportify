@@ -24,13 +24,44 @@ namespace ReportGeneratorProject.Controllers
 
             public string Certificate { get; set; }
         }
+        public class DynamicDbRequestForTableColumns
+        {
+            public string Server { get; set; }
+            public string Database { get; set; }
+            public string Username { get; set; }
+            public string Password { get; set; }
+
+            public string Certificate { get; set; }
+            public string TableName { get; set; }
+        }
+        public class DynamicDbRequestForProcedureParameters
+        {
+            public string Server { get; set; }
+            public string Database { get; set; }
+            public string Username { get; set; }
+            public string Password { get; set; }
+
+            public string Certificate { get; set; }
+            public string ProcedureName { get; set; }
+        }
+
+        public class DynamicDbRequestForViews
+        {
+            public string Server { get; set; }
+            public string Database { get; set; }
+            public string Username { get; set; }
+            public string Password { get; set; }
+
+            public string Certificate { get; set; }
+            public string ViewName { get; set; }
+        }
         [HttpPost("dynamicdb")]
         public async Task<IActionResult> DynamicDb([FromBody] DynamicDbRequest request)
         {
             try
             {
                 // Call the service to retrieve the database tables and columns
-                var databaseWithTables = await _dynamicDbContextService.GetDatabaseWithTablesAndColumnsAsync(request.Server, request.Database, request.Username, request.Password,request.Certificate);
+                var databaseWithTables = await _dynamicDbContextService.GetDatabaseSummaryAsync(request.Server, request.Database, request.Username, request.Password,request.Certificate);
 
                 // Return the JSON response
                 return Ok(databaseWithTables);
@@ -41,6 +72,59 @@ namespace ReportGeneratorProject.Controllers
                 return BadRequest($"Error: {ex.Message}");
             }
         }
+        [HttpPost("dynamicDb/tableColumns")]
+        public async Task<IActionResult> DynamicDbTableColumns([FromBody] DynamicDbRequestForTableColumns request)
+        {
+            try
+            {
+                // Call the service to retrieve the database tables and columns
+                var databaseWithTables = await _dynamicDbContextService.GetTableColumnsAsync(request.Server, request.Database, request.Username, request.Password, request.Certificate,request.TableName);
+
+                // Return the JSON response
+                return Ok(databaseWithTables);
+            }
+            catch (Exception ex)
+            {
+                // Handle errors
+                return BadRequest($"Error: {ex.Message}");
+            }
+        }
+
+        [HttpPost("dynamicDb/procedureParameters")]
+        public async Task<IActionResult> DynamicDbProcedureParameters([FromBody] DynamicDbRequestForProcedureParameters request)
+        {
+            try
+            {
+                // Call the service to retrieve the database tables and columns
+                var databaseWithTables = await _dynamicDbContextService.GetProcedureParametersAsync(request.Server, request.Database, request.Username, request.Password, request.Certificate, request.ProcedureName);
+
+                // Return the JSON response
+                return Ok(databaseWithTables);
+            }
+            catch (Exception ex)
+            {
+                // Handle errors
+                return BadRequest($"Error: {ex.Message}");
+            }
+        }
+        [HttpPost("dynamicDb/Views")]
+        public async Task<IActionResult> DynamicDbViews([FromBody] DynamicDbRequestForViews request)
+        {
+            try
+            {
+                // Call the service to retrieve the database tables and columns
+                var databaseWithTables = await _dynamicDbContextService.GetViewColumnsAsync(request.Server, request.Database, request.Username, request.Password, request.Certificate, request.ViewName);
+
+                // Return the JSON response
+                return Ok(databaseWithTables);
+            }
+            catch (Exception ex)
+            {
+                // Handle errors
+                return BadRequest($"Error: {ex.Message}");
+            }
+        }
+
 
         //[HttpPost("dynamicProcedures")]
         //public async Task<IActionResult> DynamicSPs(RequestDynamicDTO request)
@@ -95,7 +179,7 @@ namespace ReportGeneratorProject.Controllers
                         {
                             return BadRequest("Provide parameters for the procedure to execute");
                         }
-                        result = await _dynamicDbContextService.ExecuteStoredProcedureAsync(
+                        result =  _dynamicDbContextService.ExecuteStoredProcedureAsync(
                             request.ConnectionString, request.name, request.Parameters);
                         break;
 
