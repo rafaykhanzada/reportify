@@ -15,6 +15,7 @@ namespace Service.Service
     public class WidgetService : IWidgetService
     {
         private readonly IUnitOfWork _unitOfWork;
+        private readonly ResultModel _resultModel = new();
         public WidgetService(IUnitOfWork unitOfWork)
         {
             _unitOfWork = unitOfWork;
@@ -64,7 +65,7 @@ namespace Service.Service
         //    }
         //}
 
-        public async Task<WidgetCreateDto> CreateAsync(WidgetCreateDto widgetDto)
+        public async Task<ResultModel> CreateAsync(WidgetCreateDto widgetDto)
         {
             var widgetEntity = new Widgets
             {
@@ -77,13 +78,16 @@ namespace Service.Service
             var createdWidget = await _unitOfWork.WidgetRepository.AddAsync(widgetEntity);
              await _unitOfWork.CompleteAsync();
 
-            return new WidgetCreateDto
+            _resultModel.Data =  new WidgetCreateDto
             {
                 Id = createdWidget.Id,
                 Name = widgetDto.Name,
                 DefaultImage = widgetDto.DefaultImage,
                 DragImage = widgetDto.DragImage,
             };
+            _resultModel.Success = true;
+            _resultModel.Message = "Operation Completed Successfully!";
+            return _resultModel;
         }
         public Task<bool> DeleteAsync(int id)
         {
@@ -156,6 +160,7 @@ namespace Service.Service
                 Name = w.Name,
                 DefaultImage = w.DefaultImage,
                 DragImage = w.DragImage,
+                Desc=w.Desc,
 
                 // Only include WidgetSettings associated with this widget
                 WidgetSettings = w.WidgetSettings
@@ -279,10 +284,13 @@ namespace Service.Service
         //    return result;
         //}
 
-        public async Task<Widgets> GetByIdAsync(int id)
+        public async Task<ResultModel> GetByIdAsync(int id)
         {
             var widget = await _unitOfWork.WidgetRepository.GetSingleIncludeAsync(w=>w.Id==id);
-            return widget;
+            _resultModel.Data = widget;
+            _resultModel.Success = true;
+            _resultModel.Message = "Operation Completed Successfully!";
+            return _resultModel;
         }
 
         public Task<bool> UpdateAsync(int id, WidgetDto dto)

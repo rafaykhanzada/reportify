@@ -12,8 +12,8 @@ namespace Service.IService
     public interface IWidgetService
     {
         Task<ResultModel> GetAllAsync();
-        Task<Widgets> GetByIdAsync(int id);
-        Task<WidgetCreateDto> CreateAsync(WidgetCreateDto widget);
+        Task<ResultModel> GetByIdAsync(int id);
+        Task<ResultModel> CreateAsync(WidgetCreateDto widget);
         Task<bool> UpdateAsync(int id, WidgetDto dto);
         Task<bool> DeleteAsync(int id);
     }

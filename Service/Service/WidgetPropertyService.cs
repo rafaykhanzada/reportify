@@ -1,5 +1,6 @@
 ﻿using Core.Data.DTOs;
 using Core.Data.Models;
+using Core.Utils;
 using Service.IService;
 using System;
 using System.Collections.Generic;
@@ -15,6 +16,7 @@ namespace Service.Service
         private readonly IUnitOfWork _unitOfWork;
         private readonly IWidgetSettingsService widgetSettingsService;
         private readonly IWidgetService widgetService;
+        private readonly ResultModel _resultModel=new();
         public WidgetPropertyService(IUnitOfWork unitOfWork, IWidgetSettingsService widgetSettingsService, IWidgetService widgetService)
         {
             _unitOfWork = unitOfWork;
@@ -22,15 +24,15 @@ namespace Service.Service
             this.widgetService = widgetService;
         }
 
-        public async Task<WidgetPropertyCreateDto> CreateAsync(WidgetPropertyCreateDto widgetPropertyDto)
+        public async Task<ResultModel> CreateAsync(WidgetPropertyCreateDto widgetPropertyDto)
         {
             // Fetch the WidgetSettings entity by ID
             var widgetSettingsEntity = await widgetSettingsService.GetByIdAsync(widgetPropertyDto.WsId);
 
-            _unitOfWork.WidgetSettingsRepository.Attach(widgetSettingsEntity);
+            _unitOfWork.WidgetSettingsRepository.Attach((WidgetSettings)widgetSettingsEntity.Data);
             // Fetch the Widget entity by ID
             var widgetEntity = await widgetService.GetByIdAsync(widgetPropertyDto.WidgetId);
-            _unitOfWork.WidgetRepository.Attach(widgetEntity);
+            _unitOfWork.WidgetRepository.Attach((Widgets)widgetEntity.Data);
             if (widgetEntity == null)
             {
                 throw new Exception($"Widget with ID {widgetPropertyDto.WidgetId} not found.");
@@ -50,9 +52,9 @@ namespace Service.Service
                 pLabel = widgetPropertyDto.pLabel,
                 Datasource = widgetPropertyDto.Datasource,
                 // Associate with the parent settings
-                WidgetSettings = widgetSettingsEntity,
+                WidgetSettings = (WidgetSettings)widgetSettingsEntity.Data,
                 // Associate with the parent widget
-                Widget = widgetEntity // Set the widget entity
+                Widget = (Widgets)widgetEntity.Data // Set the widget entity
             };
 
             // Add the new WidgetProperty entity to the repository
@@ -60,7 +62,8 @@ namespace Service.Service
             await _unitOfWork.CompleteAsync();
 
             // Return a DTO containing the created property information
-            return new WidgetPropertyCreateDto
+             
+            _resultModel.Data = new WidgetPropertyCreateDto
             {
                 Id = createdProperty.Id,
                 pName = createdProperty.pName,
@@ -70,7 +73,10 @@ namespace Service.Service
                 Datasource = createdProperty.Datasource,
                 WsId = createdProperty.WsId,
                 WidgetId = createdProperty.WidgetId // Return the Widget ID as well
-            };
+            }; 
+            _resultModel.Success = true;
+            _resultModel.Message = "Operation Completed Successfully!";
+            return _resultModel;
         }
 
         public Task<bool> DeleteAsync(int id)
@@ -83,14 +89,16 @@ namespace Service.Service
             throw new NotImplementedException();
         }
 
-        public async Task<WidgetProperty> GetByIdAsync(int id)
+        public async Task<ResultModel> GetByIdAsync(int id)
         {
             var widgetProperty = await _unitOfWork.WidgetPropertyRepository.FindFirstAsync(wp=>wp.Id== id);
             if(widgetProperty == null)
             {
                 return null;
             }
-            return widgetProperty;
+            _resultModel.Data =  widgetProperty;
+            _resultModel.Success =  true;
+            return _resultModel;
         }
 
         public Task<bool> UpdateAsync(int id, WidgetPropertyDto dto)

@@ -42,13 +42,13 @@ builder.Services.AddScoped<IDynamicDbContextService, DynamicDbContextService>();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-//builder.WebHost.UseUrls("http://192.168.26.98:5001/");
-//builder.WebHost.UseUrls("http://192.168.100.3:5001/");
-//builder.WebHost.UseUrls("http://192.168.19.91:5001/");
+//builder.WebHost.UseUrls("http://192.168.19.86:5004/");
+//builder.WebHost.UseUrls("https://192.168.26.104:5000/");
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+//if (app.Environment.IsDevelopment())
+if (true)
 {
     app.UseSwagger();
     app.UseSwaggerUI();

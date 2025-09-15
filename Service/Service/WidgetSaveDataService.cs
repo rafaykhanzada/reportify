@@ -1,5 +1,6 @@
 ﻿using Core.Data.DTOs;
 using Core.Data.Models;
+using Core.Utils;
 using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json;
 using Service.IService;
@@ -16,12 +17,13 @@ namespace Service.Service
     public class WidgetSaveDataService:IWidgetSaveDataService
     {
         private readonly IUnitOfWork _unitOfWork;
+        private readonly ResultModel _resultModel;
         public WidgetSaveDataService(IUnitOfWork unitOfWork)
         {
             _unitOfWork = unitOfWork;
         }
 
-        public async Task<string> SavePropertyData(WidgetSaveDataDTO widgetSaveDataDTO)
+        public async Task<ResultModel> SavePropertyData(WidgetSaveDataDTO widgetSaveDataDTO)
         {
             try
             {
@@ -46,18 +48,20 @@ namespace Service.Service
                 };
                 await _unitOfWork.WidgetSaveDataRepository.AddAsync(saveData);
                 await _unitOfWork.CompleteAsync();
-
-                return "Report Data Saved Successfully";
+                _resultModel.Message = "Report Data Saved Successfully"; ;
+                _resultModel.Success = true;
             }
             catch (Exception ex)
             {
 
-                return "Error Inserting:" + ex.Message;
+                _resultModel.Message = "Error Inserting:" + ex.Message;
+                _resultModel.Success = true;
             }
+            return _resultModel;
         }
 
 
-        public async Task<string> GetPropertyDataAsJSON(int reportID)
+        public async Task<ResultModel> GetPropertyDataAsJSON(int reportID)
         {
             try
             {
@@ -75,12 +79,16 @@ namespace Service.Service
                     })
                     .ToListAsync();  // Execute the query asynchronously and convert it to List
 
-                return JsonConvert.SerializeObject(reportData, Newtonsoft.Json.Formatting.Indented);
+                _resultModel.Data = JsonConvert.SerializeObject(reportData, Newtonsoft.Json.Formatting.Indented);
+                _resultModel.Success = true;
             }
             catch (Exception ex)
             {
-                return $"Error retrieving report data for Report ID {reportID}: {ex.Message}";
+                _resultModel.Message = $"Error retrieving report data for Report ID {reportID}: {ex.Message}";
+
             }
+            return _resultModel;
+
         }
 
     }

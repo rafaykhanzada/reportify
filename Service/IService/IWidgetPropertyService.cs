@@ -1,5 +1,6 @@
 ﻿using Core.Data.DTOs;
 using Core.Data.Models;
+using Core.Utils;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -11,8 +12,8 @@ namespace Service.IService
     public interface IWidgetPropertyService
     {
         Task<IEnumerable<WidgetProperty>> GetAllAsync();
-        Task<WidgetProperty> GetByIdAsync(int id);
-        Task<WidgetPropertyCreateDto> CreateAsync(WidgetPropertyCreateDto widgetPropertyDto);
+        Task<ResultModel> GetByIdAsync(int id);
+        Task<ResultModel> CreateAsync(WidgetPropertyCreateDto widgetPropertyDto);
         Task<bool> UpdateAsync(int id, WidgetPropertyDto dto);
         Task<bool> DeleteAsync(int id);
     }

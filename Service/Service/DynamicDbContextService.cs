@@ -1,24 +1,17 @@
 ﻿using Core.Data.Context;
 using Core.Data.DTOs;
-using Core.Data.Models;
 using Core.Utils;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Service.IService;
-using System;
-using System.Collections.Generic;
 using System.Data;
-using System.Linq;
-using System.Text;
 using System.Text.Json;
-using System.Threading.Tasks;
 
 namespace Service.Service
 {
     public class DynamicDbContextService : IDynamicDbContextService
     {
-
+        private readonly ResultModel _resultModel=new();
     //    public async Task<DatabaseWithTablesDto> GetDatabaseWithTablesAndColumnsAsync(string server, string database, string username, string password, string trustCertificate)
     //    {
     //        // Build the connection string dynamically
@@ -167,7 +160,7 @@ namespace Service.Service
     //    }
 
 
-        public async Task<List<Dictionary<string, object>>> ExecuteStoredProcedureAsync(string connectionString, string procedureName, List<StoredProcedureParameterDto> parameters)
+        public async Task<ResultModel> ExecuteStoredProcedureAsync(string connectionString, string procedureName, List<StoredProcedureParameterDto> parameters)
         {
 
             using (var connection = new SqlConnection(connectionString))
@@ -194,17 +187,22 @@ namespace Service.Service
                     {
                         var result = new List<Dictionary<string, object>>();
 
-                        while (await reader.ReadAsync())
+                        if (reader.HasRows)
                         {
-                            var row = new Dictionary<string, object>();
-                            for (int i = 0; i < reader.FieldCount; i++)
+                            while (reader.Read())
                             {
-                                row[reader.GetName(i)] = await reader.IsDBNullAsync(i) ? null : reader.GetValue(i);
+                                var row = new Dictionary<string, object>();
+                                for (int i = 0; i < reader.FieldCount; i++)
+                                {
+                                    row[reader.GetName(i)] = await reader.IsDBNullAsync(i) ? null : reader.GetValue(i);
+                                }
+                                result.Add(row);
                             }
-                            result.Add(row);
                         }
 
-                        return result;
+                        _resultModel.Data = result;
+                        _resultModel.Success = true;
+                        return _resultModel;
                     }
                 }
             }
@@ -275,7 +273,7 @@ namespace Service.Service
         //        }
 
 
-        public async Task<List<Dictionary<string, object>>> ExecuteViewAsync(string connectionString, string viewName)
+        public async Task<ResultModel> ExecuteViewAsync(string connectionString, string viewName)
         {
             using (var connection = new SqlConnection(connectionString))
             {
@@ -298,14 +296,15 @@ namespace Service.Service
                             }
                             result.Add(row);
                         }
-
-                        return result;
+                        _resultModel.Data = result;
+                        _resultModel.Success = true;
+                        return _resultModel;
                     }
                 }
             }
         }
 
-        public async Task<List<Dictionary<string, object>>> ExecuteTableAsync(string connectionString, string tableName, List<string> columns = null)
+        public async Task<ResultModel> ExecuteTableAsync(string connectionString, string tableName, List<string> columns = null)
         {
             using (var connection = new SqlConnection(connectionString))
             {
@@ -331,13 +330,16 @@ namespace Service.Service
                             result.Add(row);
                         }
 
-                        return result;
+
+                        _resultModel.Data = result;
+                        _resultModel.Success = true;
+                        return _resultModel;
                     }
                 }
             }
         }
 
-        public async Task<DatabaseSummaryDto> GetDatabaseSummaryAsync(string server, string database, string username, string password, string trustCertificate)
+        public async Task<ResultModel> GetDatabaseSummaryAsync(string server, string database, string username, string password, string trustCertificate)
         {
             // Build the connection string dynamically
             var connectionString = $"Server={server};Database={database};User Id={username};Password={password};TrustServerCertificate={trustCertificate};";
@@ -365,18 +367,19 @@ namespace Service.Service
                     .FromSqlRaw("SELECT TABLE_NAME AS ViewName FROM INFORMATION_SCHEMA.VIEWS")
                     .Select(v => v.ViewName)
                     .ToListAsync();
-
+                _resultModel.Success = true;
                 // Construct the response object
-                return new DatabaseSummaryDto
+                _resultModel.Data= new DatabaseSummaryDto
                 {
                     DbName = database,
                     Tables = tableNames,
                     Procedures = procedureNames,
                     Views = viewNames
                 };
+                return _resultModel;
             }
         }
-        public async Task<List<ColumnDetailsDto>> GetTableColumnsAsync(string server, string database, string username, string password, string trustCertificate, string tableName)
+        public async Task<ResultModel> GetTableColumnsAsync(string server, string database, string username, string password, string trustCertificate, string tableName)
         {
             // Build the connection string dynamically
             var connectionString = $"Server={server};Database={database};User Id={username};Password={password};TrustServerCertificate={trustCertificate};";
@@ -408,10 +411,12 @@ namespace Service.Service
                     })
                     .ToListAsync();
 
-                return columns;
+                _resultModel.Data= columns;
+                _resultModel.Success= true;
+                return _resultModel;
             }
         }
-        public async Task<List<ParameterDetailsDto>> GetProcedureParametersAsync(string server, string database, string username, string password, string trustCertificate, string procedureName)
+        public async Task<ResultModel> GetProcedureParametersAsync(string server, string database, string username, string password, string trustCertificate, string procedureName)
         {
             // Build the connection string dynamically
             var connectionString = $"Server={server};Database={database};User Id={username};Password={password};TrustServerCertificate={trustCertificate};";
@@ -442,10 +447,12 @@ namespace Service.Service
                     })
                     .ToListAsync();
 
-                return parameters;
+                _resultModel.Data= parameters;
+                _resultModel.Success=true;
+                return _resultModel;
             }
         }
-        public async Task<List<ColumnDetailsDto>> GetViewColumnsAsync(string server, string database, string username, string password, string trustCertificate, string viewName)
+        public async Task<ResultModel> GetViewColumnsAsync(string server, string database, string username, string password, string trustCertificate, string viewName)
         {
             // Build the connection string dynamically
             var connectionString = $"Server={server};Database={database};User Id={username};Password={password};TrustServerCertificate={trustCertificate};";
@@ -476,7 +483,9 @@ namespace Service.Service
                     })
                     .ToListAsync();
 
-                return viewColumns;
+                _resultModel.Data= viewColumns;
+                _resultModel.Success=true;
+                return _resultModel;
             }
         }
 

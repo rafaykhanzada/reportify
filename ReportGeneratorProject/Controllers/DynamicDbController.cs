@@ -179,7 +179,7 @@ namespace ReportGeneratorProject.Controllers
                         {
                             return BadRequest("Provide parameters for the procedure to execute");
                         }
-                        result =  _dynamicDbContextService.ExecuteStoredProcedureAsync(
+                        result =  await _dynamicDbContextService.ExecuteStoredProcedureAsync(
                             request.ConnectionString, request.name, request.Parameters);
                         break;
 

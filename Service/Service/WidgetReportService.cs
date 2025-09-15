@@ -1,5 +1,6 @@
 ﻿using Core.Data.DTOs;
 using Core.Data.Models;
+using Core.Utils;
 using Service.IService;
 using System;
 using System.Collections.Generic;
@@ -13,13 +14,14 @@ namespace Service.Service
     public class WidgetReportService: IWidgetReportService
     {
         private readonly IUnitOfWork unitOfWork;
+        private readonly ResultModel _resultModel = new();
         public WidgetReportService(IUnitOfWork _unitOfWork)
         {
             unitOfWork = _unitOfWork;
 
         }
         //Generate new report
-        public async Task<string> CreateReport(string RName)
+        public async Task<ResultModel> CreateReport(string RName)
         {
             try
             {
@@ -37,12 +39,15 @@ namespace Service.Service
 
                 await unitOfWork.WidgetReportRepository.AddAsync(model);
                 await unitOfWork.CompleteAsync();
-
-                return $"Successfully Generated Report, Report_ID: {model.Id}";
+                _resultModel.Message = $"Successfully Generated Report, Report_ID: {model.Id}";
+            _resultModel.Success = true ;
+                return _resultModel;
             }
             catch (Exception ex)
             {
-                return $"There was some error, Error Message: {ex.Message}";
+                _resultModel.Message = $"There was some error, Error Message: {ex.Message}";
+                _resultModel.Success = true;
+                return _resultModel;
             }
         }
     }

@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Core.Utils;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -8,6 +9,6 @@ namespace Service.IService
 {
     public interface IWidgetReportService
     {
-        Task<string> CreateReport(string RName);
+        Task<ResultModel> CreateReport(string RName);
     }
 }

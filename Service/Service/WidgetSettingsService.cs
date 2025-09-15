@@ -1,5 +1,6 @@
 ﻿using Core.Data.DTOs;
 using Core.Data.Models;
+using Core.Utils;
 using Microsoft.EntityFrameworkCore;
 using Service.IService;
 using System;
@@ -15,13 +16,14 @@ namespace Service.Service
     {
         private readonly IUnitOfWork _unitOfWork;
         private readonly IWidgetService _widgetService;
+        private readonly ResultModel _resultModel = new();
         public WidgetSettingsService(IUnitOfWork unitOfWork, IWidgetService widgetService)
         {
             _unitOfWork = unitOfWork;
             _widgetService = widgetService;
         }
 
-        public async Task<WidgetSettingsCreateDto> CreateAsync(WidgetSettingsCreateDto widgetSettingsDto, int widgetId)
+        public async Task<ResultModel> CreateAsync(WidgetSettingsCreateDto widgetSettingsDto, int widgetId)
         {
             //var widgetEntity = await _widgetService.GetByIdAsync(widgetId);
             //_unitOfWork.WidgetRepository.Attach(widgetEntity);
@@ -46,7 +48,7 @@ namespace Service.Service
             var widgetEntity = await _widgetService.GetByIdAsync(widgetId);
 
             // Attach the widget entity to the context to prevent EF from trying to insert it
-            _unitOfWork.WidgetRepository.Attach(widgetEntity);
+            _unitOfWork.WidgetRepository.Attach((Widgets)widgetEntity.Data);
             var existingSettings = await _unitOfWork.WidgetSettingsRepository
                 .FindAsync(ws => ws.Name == widgetSettingsDto.Name);
 
@@ -78,20 +80,24 @@ namespace Service.Service
 
             // Step 5: Associate the widget with the WidgetSettings
             // Check if the widget is already associated with the WidgetSettings
-            if (!widgetSettingsEntity.Widgets.Contains(widgetEntity))
+            if (!widgetSettingsEntity.Widgets.Contains((Widgets)widgetEntity.Data))
             {
-                widgetSettingsEntity.Widgets.Add(widgetEntity);
+                widgetSettingsEntity.Widgets.Add((Widgets)widgetEntity.Data);
             }
 
             // Step 6: Save changes to the context
             await _unitOfWork.CompleteAsync();
 
             // Return the created or existing WidgetSettings
-            return new WidgetSettingsCreateDto
+            
+            _resultModel.Data = new WidgetSettingsCreateDto
             {
                 Id = widgetSettingsEntity.Id,
                 Name = widgetSettingsEntity.Name,
             };
+            _resultModel.Message = "Operation Completed Successfully!";
+            _resultModel.Success= true;
+            return _resultModel;
         }
 
         //public async Task<WidgetSettingsCreateDto> CreateAsync(WidgetSettingsCreateDto widgetSettingsDto, int widgetId)
@@ -149,14 +155,16 @@ namespace Service.Service
             throw new NotImplementedException();
         }
 
-        public async Task<WidgetSettings> GetByIdAsync(int id)
+        public async Task<ResultModel> GetByIdAsync(int id)
         {
             var widgetSetting = await _unitOfWork.WidgetSettingsRepository.FindFirstAsync(ws=>ws.Id==id);
             if(widgetSetting == null)
             {
                 return null;
             }
-            return widgetSetting;
+            _resultModel.Data =  widgetSetting;
+            _resultModel.Success = true;
+            return _resultModel;
         }
 
         public Task<bool> UpdateAsync(int id, WidgetSettingsDto dto)

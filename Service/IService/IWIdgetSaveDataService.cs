@@ -1,4 +1,5 @@
 ﻿using Core.Data.DTOs;
+using Core.Utils;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,8 +10,8 @@ namespace Service.IService
 {
     public interface IWidgetSaveDataService
     {
-        Task<string> SavePropertyData(WidgetSaveDataDTO widgetSaveDataDTO);
+        Task<ResultModel> SavePropertyData(WidgetSaveDataDTO widgetSaveDataDTO);
 
-        Task<string> GetPropertyDataAsJSON(int reportID);
+        Task<ResultModel> GetPropertyDataAsJSON(int reportID);
     }
 }

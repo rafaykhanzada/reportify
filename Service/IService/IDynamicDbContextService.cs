@@ -1,4 +1,5 @@
 ﻿using Core.Data.DTOs;
+using Core.Utils;
 using Microsoft.AspNetCore.Http;
 using System;
 using System.Collections.Generic;
@@ -11,15 +12,15 @@ namespace Service.IService
     public interface IDynamicDbContextService
     {
         //Task<DatabaseWithTablesDto> GetDatabaseWithTablesAndColumnsAsync(string server, string database, string username, string password,string trustCertificate);
-        Task<List<Dictionary<string, object>>> ExecuteStoredProcedureAsync(string connectionString, string procedureName, List<StoredProcedureParameterDto> parameters);
+        Task<ResultModel> ExecuteStoredProcedureAsync(string connectionString, string procedureName, List<StoredProcedureParameterDto> parameters);
 
-        Task<List<Dictionary<string, object>>> ExecuteTableAsync(string connectionString, string tableName, List<string> columns = null);
+        Task<ResultModel> ExecuteTableAsync(string connectionString, string tableName, List<string> columns = null);
 
-        Task<List<Dictionary<string, object>>> ExecuteViewAsync(string connectionString, string viewName);
+        Task<ResultModel> ExecuteViewAsync(string connectionString, string viewName);
 
-        Task<DatabaseSummaryDto> GetDatabaseSummaryAsync(string server, string database, string username, string password, string trustCertificate);
-        Task<List<ColumnDetailsDto>> GetTableColumnsAsync(string server, string database, string username, string password, string trustCertificate, string tableName);
-        Task<List<ParameterDetailsDto>> GetProcedureParametersAsync(string server, string database, string username, string password, string trustCertificate, string procedureName);
-        Task<List<ColumnDetailsDto>> GetViewColumnsAsync(string server, string database, string username, string password, string trustCertificate, string viewName);
+        Task<ResultModel> GetDatabaseSummaryAsync(string server, string database, string username, string password, string trustCertificate);
+        Task<ResultModel> GetTableColumnsAsync(string server, string database, string username, string password, string trustCertificate, string tableName);
+        Task<ResultModel> GetProcedureParametersAsync(string server, string database, string username, string password, string trustCertificate, string procedureName);
+        Task<ResultModel> GetViewColumnsAsync(string server, string database, string username, string password, string trustCertificate, string viewName);
     }
 }
