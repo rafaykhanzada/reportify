@@ -6,12 +6,19 @@ namespace Core.Data.Context
     public class AppDbContext : DbContext
     {
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
+
+        public AppDbContext()
+        {
+        }
+
+        public DbSet<Project> Project { get; set; }
         public DbSet<Widgets> Widgets { get; set; }
         public DbSet<WidgetSettings> WidgetSettings { get; set; }
         public DbSet<WidgetProperty> WidgetProperty { get; set; }
         public DbSet<WidgetPropertyData> WidgetPropertyData { get; set; }
         public DbSet<WidgetReportData> WidgetReportData { get; set; }
         public DbSet<WidgetSaveData> WidgetSaveData { get; set; }
+        public DbSet<Report> Report { get; set; }
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<Widgets>()
@@ -37,6 +44,9 @@ namespace Core.Data.Context
                 .HasOne(wsd => wsd.WidgetReportData)
                 .WithMany(wrd => wrd.WidgetSaveData)
                 .HasForeignKey(wsd => wsd.RId);
+
+            modelBuilder.Entity<Project>().ToTable($"tbl{nameof(Project)}");
+            modelBuilder.Entity<Report>().ToTable($"tbl{nameof(Report)}");
         }
         
 

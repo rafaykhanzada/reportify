@@ -1,8 +1,70 @@
-﻿using Microsoft.Data.SqlClient;
+﻿using Core.Data.Context;
+using Microsoft.Data.SqlClient;
+using Microsoft.EntityFrameworkCore;
 using System.Data;
+using System.Data.Common;
 
 public class DbUtil
 {
+    public static List<T> RawSqlQuery<T>(string query, Func<DbDataReader, T> map)
+    {
+        using (var context = new AppDbContext())
+        {
+            using (var command = context.Database.GetDbConnection().CreateCommand())
+            {
+                command.CommandText = query;
+                command.CommandType = CommandType.Text;
+
+                context.Database.OpenConnection();
+
+                using (var result = command.ExecuteReader())
+                {
+                    var entities = new List<T>();
+
+                    while (result.Read())
+                    {
+                        entities.Add(map(result));
+                    }
+
+                    return entities;
+                }
+            }
+        }
+    }
+    public static List<T> RawSqlQuery<T>(string query, Func<DbDataReader, T> map, SqlConnection dbConnection)
+    {
+        // Use provided connection
+        using (var command = dbConnection.CreateCommand())
+        {
+            command.CommandText = query;
+            command.CommandType = CommandType.Text;
+
+            bool shouldCloseConnection = dbConnection.State == ConnectionState.Closed;
+            if (shouldCloseConnection)
+                dbConnection.Open();
+
+            try
+            {
+                using (var result = command.ExecuteReader())
+                {
+                    var entities = new List<T>();
+                    while (result.Read())
+                    {
+                        entities.Add(map(result));
+                    }
+                    return entities;
+                }
+            }
+            finally
+            {
+                if (shouldCloseConnection)
+                {
+                    dbConnection.Close();
+                }
+            }
+        }
+
+    }
     public static bool CheckDuplicate(string tableName, string whereClause, SqlConnection cn)
     {
         string query = "select * from " + tableName + " where " + whereClause;
@@ -61,6 +123,7 @@ public class DbUtil
     {
         return GetAllDBRows("select * from " + tableName + " where " + whereClause, cn);
     }
+  
 
     public static DataTable GetAllDBRows(string query, SqlConnection cn)
     {

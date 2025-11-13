@@ -15,6 +15,8 @@ namespace UnitOfWork
         IWidgetPropertyRepository WidgetPropertyRepository { get; }
         IWidgetReportRepository WidgetReportRepository { get; }
         IWidgetSaveDataRepository WidgetSaveDataRepository { get; }
+        IProjectRepository ProjectRepository { get; }
+        IReportRepository ReportRepository { get; }
         Task RollbackAsync();
         Task<int> CompleteAsync();
         int Complete();

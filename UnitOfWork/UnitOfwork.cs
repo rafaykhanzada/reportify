@@ -16,6 +16,10 @@ namespace UnitOfWork
         private IWidgetPropertyDataRepository widgetPropertyDataRepository;
         private IWidgetSaveDataRepository widgetSaveDataRepository;
         private IWidgetReportRepository widgetReportRepository;
+        private IProjectRepository projectRepository;
+        private IReportRepository reportRepository;
+        public IReportRepository ReportRepository => reportRepository ??= new ReportRepository(_db);
+        public IProjectRepository ProjectRepository => projectRepository ??= new ProjectRepository(_db);
         public IWidgetRepository WidgetRepository => widgetRepository ??= new WidgetRepository(_db);
         public IWidgetSettingsRepository WidgetSettingsRepository => widgetSettingsRepository ??= new WidgetSettingsRepository(_db);
         public IWidgetPropertyRepository WidgetPropertyRepository => widgetPropertyRepository ??= new WidgetPropertyRepository(_db);

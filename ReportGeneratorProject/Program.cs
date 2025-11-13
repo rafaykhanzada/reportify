@@ -39,11 +39,13 @@ builder.Services.AddScoped<IWidgetPropertyDataService, WidgetPropertyDataService
 builder.Services.AddScoped<IWidgetReportService, WidgetReportService>();
 builder.Services.AddScoped<IWidgetSaveDataService,WidgetSaveDataService>();
 builder.Services.AddScoped<IDynamicDbContextService, DynamicDbContextService>();
+builder.Services.AddScoped<IProjectService, ProjectService>();
+builder.Services.AddScoped<IReportService, ReportService>();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-//builder.WebHost.UseUrls("http://192.168.19.86:5004/");
-//builder.WebHost.UseUrls("https://192.168.26.104:5000/");
+builder.WebHost.UseUrls("https://192.168.19.86:5008/");
+//builder.WebHost.UseUrls("https://192.168.26.104:5008/");
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.

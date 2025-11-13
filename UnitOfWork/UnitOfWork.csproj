@@ -7,12 +7,16 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Repository\Repository.csproj" />
+    <Compile Remove="IUnitOfWork\**" />
+    <Compile Remove="UnitOfWork\**" />
+    <EmbeddedResource Remove="IUnitOfWork\**" />
+    <EmbeddedResource Remove="UnitOfWork\**" />
+    <None Remove="IUnitOfWork\**" />
+    <None Remove="UnitOfWork\**" />
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="IUnitOfWork\" />
-    <Folder Include="UnitOfWork\" />
+    <ProjectReference Include="..\Repository\Repository.csproj" />
   </ItemGroup>
 
 </Project>
