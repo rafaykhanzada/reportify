@@ -13,6 +13,7 @@ namespace Service.IService
     {
         //Task<DatabaseWithTablesDto> GetDatabaseWithTablesAndColumnsAsync(string server, string database, string username, string password,string trustCertificate);
         Task<ResultModel> ExecuteStoredProcedureAsync(string connectionString, string procedureName, List<StoredProcedureParameterDto> parameters);
+        Task<ResultModel> ExecuteStoredProcedureSchemaAsync(string connectionString, string procedureName, List<StoredProcedureParameterDto> parameters);
 
         Task<ResultModel> ExecuteTableAsync(string connectionString, string tableName, List<string> columns = null);
 

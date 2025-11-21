@@ -1,4 +1,5 @@
 ﻿using Core.Data.Context;
+using Core.Data.DTOs;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
@@ -31,13 +32,49 @@ public class DbUtil
             }
         }
     }
-    public static List<T> RawSqlQuery<T>(string query, Func<DbDataReader, T> map, SqlConnection dbConnection)
+    public static List<T> RawSqlQuery<T>(string query, Func<DbDataReader, T> map, SqlConnection dbConnection,CommandType commandType= CommandType.Text)
     {
         // Use provided connection
         using (var command = dbConnection.CreateCommand())
         {
             command.CommandText = query;
-            command.CommandType = CommandType.Text;
+            command.CommandType = commandType;
+
+            bool shouldCloseConnection = dbConnection.State == ConnectionState.Closed;
+            if (shouldCloseConnection)
+                dbConnection.Open();
+
+            try
+            {
+                using (var result = command.ExecuteReader())
+                {
+                    var entities = new List<T>();
+                    while (result.Read())
+                    {
+                        entities.Add(map(result));
+                    }
+                    return entities;
+                }
+            }
+            finally
+            {
+                if (shouldCloseConnection)
+                {
+                    dbConnection.Close();
+                }
+            }
+        }
+
+    }
+    public static List<T> RawSqlQuery<T>(string query,List<Procedureparameter> sqlParameters, Func<DbDataReader, T> map, SqlConnection dbConnection, CommandType commandType = CommandType.StoredProcedure)
+    {
+        // Use provided connection
+        using (var command = dbConnection.CreateCommand())
+        {
+            command.CommandText = query;
+            command.CommandType = commandType;
+            foreach (var item in sqlParameters)
+                command.Parameters.AddWithValue(item.name, item.value);
 
             bool shouldCloseConnection = dbConnection.State == ConnectionState.Closed;
             if (shouldCloseConnection)
@@ -131,6 +168,27 @@ public class DbUtil
         DataTable dt = new DataTable();
         da.Fill(dt);
         return dt;
+    }
+    public static DataTable GetAllDBRows(string storedProcedure, SqlConnection cn, List<Procedureparameter> parameters = null)
+    {
+        using (SqlCommand cmd = new SqlCommand(storedProcedure, cn))
+        {
+            cmd.CommandType = CommandType.StoredProcedure;
+
+            // Add parameters (optional)
+            if (parameters != null)
+            {
+                foreach (var p in parameters)
+                    cmd.Parameters.AddWithValue(p.name, p.value);
+            }
+
+            using (SqlDataAdapter da = new SqlDataAdapter(cmd))
+            {
+                DataTable dt = new DataTable();
+                da.Fill(dt);
+                return dt;
+            }
+        }
     }
 
     public static int GetMaxSeqId(string tableName, string columnName, SqlConnection cn)

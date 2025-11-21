@@ -204,6 +204,46 @@ namespace ReportGeneratorProject.Controllers
                 return BadRequest(ex.Message);
             }
         }
+        
+        [HttpPost("dynamicProceduresSchema")]
+        public async Task<IActionResult> DynamicSchemaSPs(RequestDynamicDTO request)
+        {
+            try
+            {
+                object result; // Declaring result at the start
+
+                switch (request.Type.ToLower())
+                {
+                    case "procedure":
+                        if (request.Parameters == null)
+                        {
+                            return BadRequest("Provide parameters for the procedure to execute");
+                        }
+                        result =  await _dynamicDbContextService.ExecuteStoredProcedureSchemaAsync(
+                            request.ConnectionString, request.name, request.Parameters);
+                        break;
+
+                    case "views":
+                        result = await _dynamicDbContextService.ExecuteViewAsync(
+                            request.ConnectionString, request.name);
+                        break;
+
+                    case "tables":
+                        result = await _dynamicDbContextService.ExecuteTableAsync(
+                            request.ConnectionString, request.name, request.Columns);
+                        break;
+
+                    default:
+                        return BadRequest("Invalid Type. Valid options are: procedure, views, tables.");
+                }
+
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
 
 
     }

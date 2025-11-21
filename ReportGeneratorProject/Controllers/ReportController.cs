@@ -19,10 +19,10 @@ namespace ReportGeneratorReport.Controllers
 
         // GET api/<EmailSetupController>/5
         [HttpGet("{id}")]
-        public IActionResult Get(int id)
+        public async Task<IActionResult> Get(int id)
         {
             if (ModelState.IsValid)
-                return Ok(_reportService.Get(id));
+                return Ok(await _reportService.Get(id));
             return BadRequest();
         }
         

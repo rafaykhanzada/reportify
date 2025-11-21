@@ -9,7 +9,7 @@ namespace Service.IService
         ResultModel Get();
         Task<int> GetCount();
         Task<ResultModel> Get(int pageIndex, int pageSize, FilterDto? model);
-        ResultModel Get(int id);
+        Task<ResultModel> Get(int id);
         ResultModel GetPreview(int id);
         Task<ResultModel> CreateOrUpdate(ReportDto model);
         Task<ResultModel> Delete(int id);

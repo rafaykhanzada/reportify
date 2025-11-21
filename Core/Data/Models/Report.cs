@@ -13,6 +13,7 @@ namespace Core.Data.Models
         public string? Connection { get; set; }
         public string? Type { get; set; }
         public string? TableType { get; set; }
+        public string? Table { get; set; }
         public string? Widgets { get; set; }
         public string? Context { get; set; }
         [ForeignKey(nameof(ProjectId))]

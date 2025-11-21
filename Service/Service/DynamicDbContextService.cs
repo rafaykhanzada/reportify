@@ -3,6 +3,7 @@ using Core.Data.DTOs;
 using Core.Utils;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Newtonsoft.Json;
 using Service.IService;
 using System.Data;
 using System.Text.Json;
@@ -201,6 +202,62 @@ namespace Service.Service
                         }
 
                         _resultModel.Data = result;
+                        _resultModel.Success = true;
+                        return _resultModel;
+                    }
+                }
+            }
+        }
+        public async Task<ResultModel> ExecuteStoredProcedureSchemaAsync(string connectionString, string procedureName, List<StoredProcedureParameterDto> parameters)
+        {
+            List<DynamicDbSchema> table_schema = new List<DynamicDbSchema>();
+            using (var connection = new SqlConnection(connectionString))
+            {
+                await connection.OpenAsync();
+
+                using (var command = new SqlCommand(procedureName, connection))
+                {
+                    command.CommandType = CommandType.StoredProcedure;
+
+                    // Dynamically add parameters
+                    foreach (var parameter in parameters)
+                    {
+                        var sqlParameter = new SqlParameter
+                        {
+                            ParameterName = parameter.Name,
+                            Value = ConvertParameterValue(parameter.Value, parameter.DataType),
+                            SqlDbType = MapToSqlDbType(parameter.DataType)
+                        };
+                        command.Parameters.Add(sqlParameter);
+                    }
+
+                    using (var reader = await command.ExecuteReaderAsync())
+                    {
+                        var result = new List<Dictionary<string, object>>();
+
+                        if (reader.HasRows)
+                        {
+                            var schema = reader.GetSchemaTable();
+                            var json = JsonConvert.SerializeObject(schema);
+                            if (schema!=null)
+                                table_schema = JsonConvert.DeserializeObject<List<DynamicDbSchema>>(json);
+                            foreach (var item in table_schema)
+                            {
+                                SqlDbType sqlType = (SqlDbType)item.ProviderType;
+                                item.DataType = sqlType.ToString().ToLower();
+                            }
+                            //while (reader.Read())
+                            //{
+                            //    var row = new Dictionary<string, object>();
+                            //    for (int i = 0; i < reader.FieldCount; i++)
+                            //    {
+                            //        row[reader.GetName(i)] = await reader.IsDBNullAsync(i) ? null : reader.GetValue(i);
+                            //    }
+                            //    result.Add(row);
+                            //}
+                        }
+
+                        _resultModel.Data = table_schema;
                         _resultModel.Success = true;
                         return _resultModel;
                     }
@@ -499,6 +556,7 @@ namespace Service.Service
                 "decimal" => SqlDbType.Decimal,
                 "bit" => SqlDbType.Bit,
                 "datetime" => SqlDbType.DateTime,
+                "date" => SqlDbType.DateTime,
                 _ => throw new ArgumentException($"Unsupported data type: {dataType}")
             };
         }
