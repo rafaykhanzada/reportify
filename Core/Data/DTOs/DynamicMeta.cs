@@ -1,4 +1,4 @@
-﻿namespace Core.Data.DTOs
+namespace Core.Data.DTOs
 {
 
 
@@ -24,16 +24,17 @@
         public Dbmeta[]? dbMeta { get; set; }
         public Tabledata? tableData { get; set; }
         public Symbology? Symbology { get; set; }
+        public bool? isFormula { get; set; }
     }
 
     public class Symbology
     {
         public string? Value { get; set; }
         public string? Type { get; set; }
-        public  bool Visibility { get; set; }
+        public bool Visibility { get; set; }
         public string? correctionlevel { get; set; }
     }
-        public class Borderstyles
+    public class Borderstyles
     {
         public string? style { get; set; }
         public string? color { get; set; }
@@ -66,6 +67,9 @@
         public string? documentMap { get; set; }
         public bool? canGrow { get; set; }
         public bool? canShrink { get; set; }
+        public string? formula { get; set; }
+        public bool? useFormula { get; set; }
+        public string? formulaQuery { get; set; }
     }
     public class Tabledata
     {
@@ -74,9 +78,32 @@
     }
     public class TabledataHeaders
     {
-        public string? Column { get; set; }
-        public string? Width { get; set; }
+        public string column { get; set; }
+        public int width { get; set; }
+        public string Format { get; set; }
+        public string template { get; set; }
+        public string headerAlign { get; set; }
+        public Headerstyle headerStyle { get; set; }
+        public string align { get; set; }
+        public Style style { get; set; }
+        public string symbol { get; set; }
     }
+
+    public class Headerstyle
+    {
+        public string backgroundColor { get; set; }
+        public string color { get; set; }
+    }
+
+    public class Style
+    {
+        public string fontSize { get; set; }
+        public string fontStyle { get; set; }
+        public string fontWeight { get; set; }
+        public string color { get; set; }
+    }
+
+
     public class Dbmeta
     {
         public string? db { get; set; }
@@ -84,12 +111,15 @@
         public string? column { get; set; }
         public string? type { get; set; }
         public string? alias { get; set; }
+        public string? source { get; set; }
         public string? tabletype { get; set; }
         public bool? isProcedureParameter { get; set; }
         public bool? isProcedureResultColumn { get; set; }
         public string? procedureName { get; set; }
         public string? parameterMode { get; set; }
         public Procedureparameter[]? procedureParameters { get; set; }
+        public string? formula { get; set; }
+        public string? formulaQuery { get; set; }
     }
     public class Procedureparameter
     {

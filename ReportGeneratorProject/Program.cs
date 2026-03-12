@@ -41,6 +41,9 @@ builder.Services.AddScoped<IWidgetSaveDataService,WidgetSaveDataService>();
 builder.Services.AddScoped<IDynamicDbContextService, DynamicDbContextService>();
 builder.Services.AddScoped<IProjectService, ProjectService>();
 builder.Services.AddScoped<IReportService, ReportService>();
+builder.Services.AddScoped<IReportDesignerService, ReportDesignerService>();
+builder.Services.AddScoped<IFormulaEvaluationService, FormulaEvaluationService>();
+builder.Services.AddScoped<IHtmlReportRenderService, EnhancedHtmlReportRenderService>();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();

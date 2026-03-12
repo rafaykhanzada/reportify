@@ -1,4 +1,4 @@
-﻿using AutoMapper;
+using AutoMapper;
 using Core.Constant;
 using Core.Data.DTOs;
 using Core.Data.Models;
@@ -10,21 +10,28 @@ using Service.IService;
 using System.Data;
 using System.Linq;
 using System.Linq.Expressions;
-using System.Reflection.Metadata.Ecma335;
-using System.Text.Json;
 using UnitOfWork;
-using static Microsoft.EntityFrameworkCore.DbLoggerCategory.Database;
 
 namespace Service.Service
 {
-    public class ReportService(IUnitOfWork unitOfWork, ILogger<ReportService> logger, IMapper mapper, IDynamicDbContextService dynamicDbContextService) : IReportService
+    public class ReportService(IUnitOfWork unitOfWork, ILogger<ReportService> logger, IMapper mapper, IDynamicDbContextService dynamicDbContextService, IFormulaEvaluationService formulaEvaluationService) : IReportService
     {
+        private const string WidgetTypeTextbox = "textbox";
+        private const string WidgetTypeTable = "table";
+        private const string WidgetTypeProcedures = "procedures";
+        private const string WidgetTypeFormula = "formula";
+        private const string TableTypeTable = "table";
+        private const string TableTypeProcedure = "procedure";
+        private const string TableTypeFormula = "formula";
+        private const string TrustServerCertificateSuffix = ";TrustServerCertificate=True";
+
         public string UserId { get; set; }
         private readonly IUnitOfWork _unitOfWork = unitOfWork;
         private readonly ILogger<ReportService> _logger = logger;
         private readonly IMapper _mapper = mapper;
         private readonly ResultModel _resultModel = new();
         private readonly IDynamicDbContextService _dynamicDbContextService = dynamicDbContextService;
+        private readonly IFormulaEvaluationService _formulaEvaluationService = formulaEvaluationService;
 
         public async Task<ResultModel> CreateOrUpdate(ReportDto model)
         {
@@ -250,7 +257,7 @@ namespace Service.Service
                 {
                     result.Object = new DynamicDbObject
                     {
-                        ObjectName = result.Table,
+                        ObjectName = dbMeta.table,
                         Parameter = dbMeta.procedureParameters.ToList(),
                         Columns = (List<DynamicDbSchema>)dataset.Data
                     };
@@ -284,124 +291,183 @@ namespace Service.Service
         {
             try
             {
-                List<DynamicWidgetMeta> dbwidgets = new();
-                List<DynamicWidgetMeta> meta = new();
-                var data = _unitOfWork.ReportRepository.Get(x => x.DeletedOn == null && x.Id == id).FirstOrDefault();
-                if (data.Widgets != null)
-                    meta = JsonConvert.DeserializeObject<List<DynamicWidgetMeta>>(data.Widgets)!;
-                string connectionString = data.Connection! + ";TrustServerCertificate=True";
-                SqlConnection cn = new SqlConnection(connectionString);
+                var report = _unitOfWork.ReportRepository
+                    .Get(x => x.DeletedOn == null && x.Id == id)
+                    .FirstOrDefault();
 
-                // (Optional) Open the connection
-                cn.Open();
-
-                // Use it in your code
-                Console.WriteLine("Connection is open!");
-
-
-                if (meta.Count > 0)
-                {
-
-                    foreach (var item in meta.Where(x=>x.dbMeta!=null))
-                    {
-                        var prodecure = item.dbMeta!.FirstOrDefault();
-                        string query = "";
-                        if (item.type == "textbox")
-                        {
-                            if (prodecure.tabletype == "table")
-                            {
-                                query = $"select Top 1 {prodecure.column} from {prodecure.table}";
-                                item.text = DbUtil.RawSqlQuery<string>(query, x => x[0].ToString(), cn).FirstOrDefault();
-
-                            }
-                            if (prodecure.tabletype == "procedure")
-                            {
-                                item.text = DbUtil.RawSqlQuery<string>(prodecure.procedureName,prodecure.procedureParameters.ToList(), x => x[$"{item.text}"].ToString(),cn,CommandType.StoredProcedure).FirstOrDefault();
-
-                            }
-                        }
-                        else if (item.type == "table")
-                        {
-                            if (prodecure.tabletype == "table")
-                            {
-                                query = $"select top 10 {prodecure.column} from {prodecure.table}";
-                                var data2 = DbUtil.GetAllDBRows(query, cn);
-                                string table = "";
-                                foreach (var row in data2.Rows)
-                                    table += ((System.Data.DataRow)(row)).ItemArray[0];
-                                //item.tableData.rows.Append();
-                            }
-                            if (prodecure.tabletype == "procedure")
-                            {
-                                query = $"exec {prodecure.procedureName}";
-                                var data2 = DbUtil.GetAllDBRows(prodecure.procedureName, cn,prodecure.procedureParameters.ToList());
-                                string?[] firstRow = item.tableData.Rows[0].ToArray();
-                                var selected = data2.DefaultView.ToTable(false, firstRow);
-                                string table = "";
-                                // Set headers (column names)
-                                //item.tableData.Headers = selected.Columns
-                                //                               .Cast<DataColumn>()
-                                //                               .Select(c => new TabledataHeaders
-                                //                               {
-                                //                                   Column = c.ColumnName,
-                                //                                   Width = ""
-                                //                               })
-                                //                               .ToList();   
-                                item.tableData.Rows = new List<List<string?>>();
-                                // Add rows
-                                foreach (DataRow row in selected.Rows)
-                                {
-                                    var rowList = row.ItemArray
-                                                     .Select(x => x?.ToString())
-                                                     .ToList();
-
-                                    item.tableData.Rows.Add(rowList);
-                                }
-                                //item.tableData.rows.Append();
-                            }
-                        }
-                        else if (item.type == "procedures")
-                        {
-                            if (prodecure.tabletype == "table")
-                            {
-                                string param = "";
-                                foreach (var para in prodecure.procedureParameters)
-                                    param += $" @{para.name}={para.value}";
-                                query = $"exec {prodecure.procedureName} ";
-                                var data2 = DbUtil.GetAllDBRows(query, cn);
-                                string table = "";
-                                foreach (var row in data2.Rows)
-                                    table += ((System.Data.DataRow)(row)).ItemArray[0];
-                                //item.tableData.rows.Append();
-                            }
-                        }
-                    }
-                    data.Widgets = JsonConvert.SerializeObject(meta);
-                }
-                if (data != null)
-                {
-                    var result = _mapper.Map<ReportDto>(data);
-                    _resultModel.Success = true;
-                    _resultModel.Data = result;
-                }
-                else
+                if (report == null)
                 {
                     _logger.LogInformation(MessageString.NotFound);
-                    _resultModel.Success = true;
-                    _resultModel.Message = MessageString.NotFound;
+                    return new ResultModel { Success = true, Message = MessageString.NotFound };
                 }
-                // Always close or dispose when done
-                cn.Close();
+
+                var meta = ParseWidgetMeta(report.Widgets);
+                if (meta is { Count: > 0 } && !string.IsNullOrWhiteSpace(report.Connection))
+                {
+                    var connectionString = report.Connection.TrimEnd(';') + TrustServerCertificateSuffix;
+                    using var connection = new SqlConnection(connectionString);
+                    connection.Open();
+
+                    foreach (var widget in meta.Where(w => w.dbMeta != null && w.dbMeta.Length > 0))
+                    {
+                        var dbMeta = widget.dbMeta![0];
+                        try
+                        {
+                            PopulateWidgetPreview(widget, dbMeta, connection);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to populate widget {WidgetId} for report {ReportId}", widget.id, id);
+                        }
+                    }
+
+                    report.Widgets = JsonConvert.SerializeObject(meta);
+                }
+
+                var result = _mapper.Map<ReportDto>(report);
+                return new ResultModel { Success = true, Data = result };
             }
             catch (Exception ex)
             {
-                _logger.LogError("Error:", ex);
-                _resultModel.Success = false;
-                _resultModel.Message = MessageString.ServerError;
+                _logger.LogError(ex, "Error generating preview for report {ReportId}", id);
+                return new ResultModel { Success = false, Message = MessageString.ServerError };
+            }
+        }
+
+        private static List<DynamicWidgetMeta> ParseWidgetMeta(string? widgetsJson)
+        {
+            if (string.IsNullOrWhiteSpace(widgetsJson))
+                return new List<DynamicWidgetMeta>();
+            try
+            {
+                return JsonConvert.DeserializeObject<List<DynamicWidgetMeta>>(widgetsJson) ?? new List<DynamicWidgetMeta>();
+            }
+            catch
+            {
+                return new List<DynamicWidgetMeta>();
+            }
+        }
+
+        private void PopulateWidgetPreview(DynamicWidgetMeta widget, Dbmeta dbMeta, SqlConnection connection)
+        {
+            if (dbMeta.tabletype == TableTypeFormula)
+            {
+                PopulateFormulaWidget(widget, dbMeta, connection);
+                return;
             }
 
-            return _resultModel;
+            switch (widget.type)
+            {
+                case WidgetTypeTextbox:
+                    PopulateTextboxWidget(widget, dbMeta, connection);
+                    break;
+                case WidgetTypeTable:
+                    PopulateTableWidget(widget, dbMeta, connection);
+                    break;
+                case WidgetTypeProcedures:
+                    PopulateProceduresWidget(widget, dbMeta, connection);
+                    break;
+                case WidgetTypeFormula:
+                    PopulateFormulaWidget(widget, dbMeta, connection);
+                    break;
+            }
         }
+
+        private void PopulateTextboxWidget(DynamicWidgetMeta widget, Dbmeta dbMeta, SqlConnection connection)
+        {
+            if (dbMeta.tabletype == TableTypeTable && !string.IsNullOrWhiteSpace(dbMeta.column) && !string.IsNullOrWhiteSpace(dbMeta.table))
+            {
+                var query = $"SELECT TOP 1 {dbMeta.column} FROM {dbMeta.table}";
+                widget.text = DbUtil.RawSqlQuery<string>(query, x => x[0].ToString(), connection).FirstOrDefault();
+                return;
+            }
+
+            if (dbMeta.tabletype == TableTypeProcedure && !string.IsNullOrWhiteSpace(dbMeta.procedureName))
+            {
+                var parameters = dbMeta.procedureParameters?.ToList() ?? new List<Procedureparameter>();
+                var columnName = widget.text ?? dbMeta.column ?? " ";
+                widget.text = DbUtil.RawSqlQuery<string>(
+                    dbMeta.procedureName,
+                    parameters,
+                    x => x[columnName].ToString(),
+                    connection,
+                    CommandType.StoredProcedure).FirstOrDefault();
+            }
+        }
+
+        private void PopulateTableWidget(DynamicWidgetMeta widget, Dbmeta dbMeta, SqlConnection connection)
+        {
+            if (dbMeta.tabletype == TableTypeTable && !string.IsNullOrWhiteSpace(dbMeta.column) && !string.IsNullOrWhiteSpace(dbMeta.table))
+            {
+                var query = $"SELECT TOP 10 {dbMeta.column} FROM {dbMeta.table}";
+                var dataTable = DbUtil.GetAllDBRows(query, connection);
+                widget.tableData ??= new Tabledata();
+                widget.tableData.Headers = dataTable.Columns.Cast<DataColumn>()
+                    .Select(c => new TabledataHeaders { column = c.ColumnName, width = 0 })
+                    .ToList();
+                widget.tableData.Rows = new List<List<string?>>();
+                foreach (DataRow row in dataTable.Rows)
+                    widget.tableData.Rows.Add(row.ItemArray.Select(x => x?.ToString()).ToList());
+                return;
+            }
+
+            if (dbMeta.tabletype != TableTypeProcedure || string.IsNullOrWhiteSpace(dbMeta.procedureName))
+                return;
+
+            var procedureResult = DbUtil.GetAllDBRows(dbMeta.procedureName, connection, dbMeta.procedureParameters?.ToList());
+            widget.tableData ??= new Tabledata();
+
+            var columnNames = widget.tableData.Rows?.FirstOrDefault()
+                ?.Select(c => c ?? string.Empty).ToArray()
+                ?? procedureResult.Columns.Cast<DataColumn>().Select(c => c.ColumnName).ToArray();
+            var selectedTable = procedureResult.DefaultView.ToTable(false, columnNames);
+
+            widget.tableData.Rows = new List<List<string?>>();
+            foreach (DataRow row in selectedTable.Rows)
+                widget.tableData.Rows.Add(row.ItemArray.Select(x => x?.ToString()).ToList());
+        }
+
+        private void PopulateProceduresWidget(DynamicWidgetMeta widget, Dbmeta dbMeta, SqlConnection connection)
+        {
+            if (dbMeta.tabletype != TableTypeTable || string.IsNullOrWhiteSpace(dbMeta.procedureName))
+                return;
+
+            var query = $"EXEC {dbMeta.procedureName} ";
+            DbUtil.GetAllDBRows(query, connection);
+        }
+
+        private void PopulateFormulaWidget(DynamicWidgetMeta widget, Dbmeta dbMeta, SqlConnection connection)
+        {
+            var formula = dbMeta.formula ?? widget.miscValues?.formula;
+            if (string.IsNullOrWhiteSpace(formula) || string.IsNullOrWhiteSpace(dbMeta.procedureName))
+                return;
+
+            var parameters = dbMeta.procedureParameters?.ToList() ?? new List<Procedureparameter>();
+            var dataTable = DbUtil.GetAllDBRows(dbMeta.procedureName, connection, parameters);
+            if (dataTable.Rows.Count == 0)
+                return;
+
+            var firstRow = dataTable.Rows[0];
+            var procedureName = dbMeta.procedureName;
+            var contextParams = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+            foreach (DataColumn col in dataTable.Columns)
+            {
+                var key = $"{procedureName}.{col.ColumnName}";
+                var value = firstRow[col];
+                contextParams[key] = value is DBNull || value == null ? string.Empty : value;
+            }
+
+            var context = new FormulaContext
+            {
+                CurrentRow = firstRow,
+                AllData = dataTable,
+                Parameters = contextParams
+            };
+
+            var result = _formulaEvaluationService.EvaluateAsString(formula, context);
+            widget.text = result ?? widget.text;
+        }
+
         public async Task<int> GetCount()
         {
             try

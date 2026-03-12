@@ -1,0 +1,599 @@
+{
+  "name": "Advanced Sales Analysis Report",
+  "description": "Comprehensive sales report with multi-level grouping, formulas, and conditional formatting",
+  "pageSettings": {
+    "paperSize": "A4",
+    "orientation": "Landscape",
+    "width": 297,
+    "height": 210,
+    "margins": {
+      "top": 15,
+      "right": 15,
+      "bottom": 15,
+      "left": 15
+    }
+  },
+  "parameters": [
+    {
+      "name": "startDate",
+      "label": "Start Date",
+      "dataType": "Date",
+      "isRequired": true,
+      "defaultValue": "2024-01-01",
+      "displayOrder": 1
+    },
+    {
+      "name": "endDate",
+      "label": "End Date",
+      "dataType": "Date",
+      "isRequired": true,
+      "defaultValue": "2024-12-31",
+      "displayOrder": 2
+    },
+    {
+      "name": "minAmount",
+      "label": "Minimum Order Amount",
+      "dataType": "Decimal",
+      "isRequired": false,
+      "defaultValue": 0,
+      "displayOrder": 3
+    }
+  ],
+  "dataSources": [
+    {
+      "name": "SalesData",
+      "sourceType": "StoredProcedure",
+      "connectionString": "Server=localhost;Database=SalesDB;Trusted_Connection=True;",
+      "sourceDefinition": "sp_GetSalesData",
+      "parameters": [
+        {
+          "name": "StartDate",
+          "dataType": "Date",
+          "useReportParameter": true,
+          "reportParameterName": "startDate"
+        },
+        {
+          "name": "EndDate",
+          "dataType": "Date",
+          "useReportParameter": true,
+          "reportParameterName": "endDate"
+        }
+      ],
+      "isPrimary": true
+    }
+  ],
+  "groups": [
+    {
+      "groupName": "Region",
+      "field": "Region",
+      "level": 1,
+      "sortDirection": "Asc",
+      "showHeader": true,
+      "showFooter": true,
+      "keepTogether": false,
+      "repeatHeaderOnNewPage": true,
+      "headerTemplate": "Region: [Region] | Period: {startDate} to {endDate}",
+      "footerTemplate": "End of Region: [Region] | Total: @RegionTotal",
+      "summaries": [
+        {
+          "name": "RegionTotal",
+          "field": "OrderAmount",
+          "function": "Sum",
+          "format": "C2",
+          "label": "Regional Sales",
+          "showInHeader": false,
+          "showInFooter": true
+        },
+        {
+          "name": "RegionOrderCount",
+          "field": "OrderID",
+          "function": "Count",
+          "label": "Total Orders",
+          "showInFooter": true
+        },
+        {
+          "name": "RegionAverage",
+          "field": "OrderAmount",
+          "function": "Average",
+          "format": "C2",
+          "label": "Average Order",
+          "showInFooter": true
+        },
+        {
+          "name": "TopOrder",
+          "field": "OrderAmount",
+          "function": "Max",
+          "format": "C2",
+          "label": "Highest Order",
+          "showInFooter": true
+        }
+      ]
+    },
+    {
+      "groupName": "Salesperson",
+      "field": "SalespersonName",
+      "level": 2,
+      "sortDirection": "Desc",
+      "showHeader": true,
+      "showFooter": true,
+      "summaries": [
+        {
+          "name": "PersonTotal",
+          "field": "OrderAmount",
+          "function": "Sum",
+          "format": "C2",
+          "label": "Sales Total",
+          "showInFooter": true
+        },
+        {
+          "name": "PersonOrderCount",
+          "field": "OrderID",
+          "function": "Count",
+          "label": "Orders",
+          "showInHeader": true,
+          "showInFooter": true
+        }
+      ]
+    },
+    {
+      "groupName": "CustomerCategory",
+      "expression": "IF([CustomerType] = \"Premium\", \"Premium Customers\", IF([CustomerType] = \"Regular\", \"Regular Customers\", \"Other\"))",
+      "level": 3,
+      "sortDirection": "Asc",
+      "showHeader": true,
+      "showFooter": true,
+      "summaries": [
+        {
+          "name": "CategoryTotal",
+          "field": "OrderAmount",
+          "function": "Sum",
+          "format": "C2",
+          "label": "Category Total",
+          "showInFooter": true
+        }
+      ]
+    }
+  ],
+  "formulaFields": [
+    {
+      "name": "Commission",
+      "label": "Sales Commission",
+      "formula": "[OrderAmount] * 0.05",
+      "resultType": "Number",
+      "format": "C2",
+      "evaluationContext": "Record",
+      "description": "5% commission on each order",
+      "category": "Calculations"
+    },
+    {
+      "name": "PerformanceRating",
+      "label": "Performance",
+      "formula": "IF([OrderAmount] > 5000, \"⭐⭐⭐ Excellent\", IF([OrderAmount] > 2000, \"⭐⭐ Good\", IF([OrderAmount] > 500, \"⭐ Fair\", \"Needs Improvement\")))",
+      "resultType": "String",
+      "evaluationContext": "Record",
+      "description": "Performance rating based on order size",
+      "category": "Analysis"
+    },
+    {
+      "name": "DaysToDeliver",
+      "label": "Delivery Days",
+      "formula": "DATEDIFF([DeliveryDate], [OrderDate])",
+      "resultType": "Number",
+      "evaluationContext": "Record",
+      "description": "Days from order to delivery",
+      "category": "Logistics"
+    },
+    {
+      "name": "OrderSize",
+      "label": "Order Size Category",
+      "formula": "IF([OrderAmount] < 500, \"Small\", IF([OrderAmount] < 2000, \"Medium\", \"Large\"))",
+      "resultType": "String",
+      "evaluationContext": "Record",
+      "category": "Classification"
+    },
+    {
+      "name": "GrandTotal",
+      "label": "Report Grand Total",
+      "formula": "SUM([OrderAmount])",
+      "resultType": "Number",
+      "format": "C2",
+      "evaluationContext": "Report",
+      "description": "Total sales for entire report",
+      "category": "Summary"
+    },
+    {
+      "name": "TotalCommission",
+      "label": "Total Commission Payable",
+      "formula": "@GrandTotal * 0.05",
+      "resultType": "Number",
+      "format": "C2",
+      "evaluationContext": "Report",
+      "description": "Total commission across all sales",
+      "category": "Summary"
+    }
+  ],
+  "runningTotals": [
+    {
+      "name": "CumulativeSales",
+      "field": "OrderAmount",
+      "function": "Sum",
+      "format": "C2",
+      "evaluationTime": "ForEachRecord",
+      "resetTime": "OnChangeOfGroup",
+      "resetOn": "Region"
+    },
+    {
+      "name": "OrderSequence",
+      "field": "OrderID",
+      "function": "Count",
+      "evaluationTime": "ForEachRecord",
+      "resetTime": "Never"
+    }
+  ],
+  "conditionalFormats": [
+    {
+      "name": "HighValueOrder",
+      "condition": "[OrderAmount] > 5000",
+      "priority": 1,
+      "style": {
+        "backgroundColor": "#90EE90",
+        "color": "#006400",
+        "fontWeight": "bold"
+      }
+    },
+    {
+      "name": "MediumValueOrder",
+      "condition": "[OrderAmount] > 2000 AND [OrderAmount] <= 5000",
+      "priority": 2,
+      "style": {
+        "backgroundColor": "#FFFACD"
+      }
+    },
+    {
+      "name": "LowValueOrder",
+      "condition": "[OrderAmount] < 500",
+      "priority": 3,
+      "style": {
+        "backgroundColor": "#FFB6C1",
+        "color": "#8B0000"
+      }
+    },
+    {
+      "name": "SlowDelivery",
+      "condition": "@DaysToDeliver > 7",
+      "priority": 4,
+      "style": {
+        "color": "#FF4500",
+        "fontStyle": "italic"
+      }
+    },
+    {
+      "name": "AlternateRows",
+      "condition": "RECORDNUMBER() % 2 = 0",
+      "priority": 5,
+      "style": {
+        "backgroundColor": "#F8F9FA"
+      }
+    }
+  ],
+  "sorting": [
+    {
+      "field": "OrderDate",
+      "direction": "Desc",
+      "order": 1
+    },
+    {
+      "field": "OrderAmount",
+      "direction": "Desc",
+      "order": 2
+    }
+  ],
+  "elements": [
+    {
+      "elementType": "TextBox",
+      "name": "ReportTitle",
+      "section": "ReportHeader",
+      "zIndex": 1,
+      "layout": {
+        "x": 20,
+        "y": 15,
+        "width": 257,
+        "height": 15
+      },
+      "style": {
+        "fontFamily": "Arial",
+        "fontSize": 24,
+        "fontWeight": "bold",
+        "textAlign": "center",
+        "color": "#2c3e50"
+      },
+      "properties": {
+        "staticText": "Advanced Sales Analysis Report"
+      }
+    },
+    {
+      "elementType": "TextBox",
+      "name": "ReportPeriod",
+      "section": "ReportHeader",
+      "zIndex": 2,
+      "layout": {
+        "x": 20,
+        "y": 32,
+        "width": 257,
+        "height": 8
+      },
+      "style": {
+        "fontFamily": "Arial",
+        "fontSize": 12,
+        "textAlign": "center",
+        "color": "#7f8c8d"
+      },
+      "dataBinding": {
+        "formula": "\"Analysis Period: \" + {startDate} + \" to \" + {endDate}"
+      }
+    },
+    {
+      "elementType": "Line",
+      "name": "HeaderLine",
+      "section": "ReportHeader",
+      "zIndex": 3,
+      "layout": {
+        "x": 20,
+        "y": 44,
+        "width": 257,
+        "height": 1
+      },
+      "style": {
+        "backgroundColor": "#3498db"
+      },
+      "properties": {
+        "thickness": 2,
+        "lineStyle": "solid"
+      }
+    },
+    {
+      "elementType": "TextBox",
+      "name": "OrderNumber",
+      "section": "Details",
+      "zIndex": 10,
+      "layout": {
+        "x": 20,
+        "y": 50,
+        "width": 30,
+        "height": 8
+      },
+      "style": {
+        "fontFamily": "Arial",
+        "fontSize": 10
+      },
+      "dataBinding": {
+        "field": "OrderID"
+      }
+    },
+    {
+      "elementType": "TextBox",
+      "name": "CustomerName",
+      "section": "Details",
+      "zIndex": 11,
+      "layout": {
+        "x": 55,
+        "y": 50,
+        "width": 70,
+        "height": 8
+      },
+      "style": {
+        "fontFamily": "Arial",
+        "fontSize": 10
+      },
+      "dataBinding": {
+        "field": "CustomerName"
+      }
+    },
+    {
+      "elementType": "TextBox",
+      "name": "OrderAmount",
+      "section": "Details",
+      "zIndex": 12,
+      "layout": {
+        "x": 130,
+        "y": 50,
+        "width": 35,
+        "height": 8
+      },
+      "style": {
+        "fontFamily": "Arial",
+        "fontSize": 10,
+        "textAlign": "right"
+      },
+      "dataBinding": {
+        "field": "OrderAmount",
+        "format": "C2"
+      }
+    },
+    {
+      "elementType": "TextBox",
+      "name": "CommissionAmount",
+      "section": "Details",
+      "zIndex": 13,
+      "layout": {
+        "x": 170,
+        "y": 50,
+        "width": 30,
+        "height": 8
+      },
+      "style": {
+        "fontFamily": "Arial",
+        "fontSize": 10,
+        "textAlign": "right"
+      },
+      "dataBinding": {
+        "formula": "@Commission"
+      }
+    },
+    {
+      "elementType": "TextBox",
+      "name": "PerformanceIndicator",
+      "section": "Details",
+      "zIndex": 14,
+      "layout": {
+        "x": 205,
+        "y": 50,
+        "width": 45,
+        "height": 8
+      },
+      "style": {
+        "fontFamily": "Arial",
+        "fontSize": 9
+      },
+      "dataBinding": {
+        "formula": "@PerformanceRating"
+      }
+    },
+    {
+      "elementType": "TextBox",
+      "name": "RunningTotal",
+      "section": "Details",
+      "zIndex": 15,
+      "layout": {
+        "x": 255,
+        "y": 50,
+        "width": 35,
+        "height": 8
+      },
+      "style": {
+        "fontFamily": "Arial",
+        "fontSize": 9,
+        "textAlign": "right",
+        "color": "#666666"
+      },
+      "dataBinding": {
+        "formula": "@CumulativeSales"
+      }
+    },
+    {
+      "elementType": "Rectangle",
+      "name": "SummaryBackground",
+      "section": "ReportFooter",
+      "zIndex": 20,
+      "layout": {
+        "x": 20,
+        "y": 5,
+        "width": 257,
+        "height": 30
+      },
+      "style": {
+        "backgroundColor": "#3498db",
+        "opacity": 0.1
+      },
+      "properties": {
+        "filled": true,
+        "cornerRadius": 5
+      }
+    },
+    {
+      "elementType": "TextBox",
+      "name": "GrandTotalLabel",
+      "section": "ReportFooter",
+      "zIndex": 21,
+      "layout": {
+        "x": 30,
+        "y": 10,
+        "width": 100,
+        "height": 10
+      },
+      "style": {
+        "fontFamily": "Arial",
+        "fontSize": 16,
+        "fontWeight": "bold",
+        "color": "#2c3e50"
+      },
+      "properties": {
+        "staticText": "GRAND TOTAL:"
+      }
+    },
+    {
+      "elementType": "TextBox",
+      "name": "GrandTotalValue",
+      "section": "ReportFooter",
+      "zIndex": 22,
+      "layout": {
+        "x": 135,
+        "y": 10,
+        "width": 60,
+        "height": 10
+      },
+      "style": {
+        "fontFamily": "Arial",
+        "fontSize": 18,
+        "fontWeight": "bold",
+        "color": "#27ae60",
+        "textAlign": "right"
+      },
+      "dataBinding": {
+        "formula": "@GrandTotal"
+      }
+    },
+    {
+      "elementType": "TextBox",
+      "name": "TotalCommissionLabel",
+      "section": "ReportFooter",
+      "zIndex": 23,
+      "layout": {
+        "x": 30,
+        "y": 22,
+        "width": 100,
+        "height": 8
+      },
+      "style": {
+        "fontFamily": "Arial",
+        "fontSize": 12,
+        "color": "#7f8c8d"
+      },
+      "properties": {
+        "staticText": "Total Commission Payable:"
+      }
+    },
+    {
+      "elementType": "TextBox",
+      "name": "TotalCommissionValue",
+      "section": "ReportFooter",
+      "zIndex": 24,
+      "layout": {
+        "x": 135,
+        "y": 22,
+        "width": 60,
+        "height": 8
+      },
+      "style": {
+        "fontFamily": "Arial",
+        "fontSize": 12,
+        "color": "#e74c3c",
+        "textAlign": "right"
+      },
+      "dataBinding": {
+        "formula": "@TotalCommission"
+      }
+    },
+    {
+      "elementType": "TextBox",
+      "name": "PageInfo",
+      "section": "PageFooter",
+      "zIndex": 30,
+      "layout": {
+        "x": 20,
+        "y": 195,
+        "width": 257,
+        "height": 6
+      },
+      "style": {
+        "fontFamily": "Arial",
+        "fontSize": 9,
+        "color": "#95a5a6",
+        "textAlign": "center"
+      },
+      "dataBinding": {
+        "formula": "\"Generated: \" + NOW() + \" | Page \" + PAGENUMBER() + \" of \" + TOTALPAGES()"
+      }
+    }
+  ]
+}
