@@ -1,8 +1,5 @@
 namespace Core.Data.DTOs
 {
-
-
-
     public class DynamicWidgetMeta
     {
         public string? id { get; set; }
@@ -78,32 +75,31 @@ namespace Core.Data.DTOs
     }
     public class TabledataHeaders
     {
-        public string column { get; set; }
-        public int width { get; set; }
-        public string Format { get; set; }
-        public string template { get; set; }
-        public string headerAlign { get; set; }
-        public Headerstyle headerStyle { get; set; }
-        public string align { get; set; }
-        public Style style { get; set; }
-        public string symbol { get; set; }
+        public string? column { get; set; }
+        public string? width { get; set; }
+        public string? format { get; set; }
+        public string? template { get; set; }
+        public Headerstyle? headerStyle { get; set; }
+        public Style? style { get; set; }
+        public string? symbol { get; set; }
     }
 
     public class Headerstyle
     {
-        public string backgroundColor { get; set; }
-        public string color { get; set; }
+        public string? backgroundColor { get; set; }
+        public string? color { get; set; }
+        public string? align { get; set; }
+
     }
 
     public class Style
     {
-        public string fontSize { get; set; }
-        public string fontStyle { get; set; }
-        public string fontWeight { get; set; }
-        public string color { get; set; }
+        public string? align { get; set; }
+        public string? fontSize { get; set; }
+        public string? fontStyle { get; set; }
+        public string? fontWeight { get; set; }
+        public string? color { get; set; }
     }
-
-
     public class Dbmeta
     {
         public string? db { get; set; }

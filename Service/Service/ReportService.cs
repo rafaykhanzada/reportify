@@ -403,7 +403,7 @@ namespace Service.Service
                 var dataTable = DbUtil.GetAllDBRows(query, connection);
                 widget.tableData ??= new Tabledata();
                 widget.tableData.Headers = dataTable.Columns.Cast<DataColumn>()
-                    .Select(c => new TabledataHeaders { column = c.ColumnName, width = 0 })
+                    .Select(c => new TabledataHeaders { column = c.ColumnName, width = "" })
                     .ToList();
                 widget.tableData.Rows = new List<List<string?>>();
                 foreach (DataRow row in dataTable.Rows)
