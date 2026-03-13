@@ -77,10 +77,18 @@ namespace Core.Data.DTOs
     {
         public string? column { get; set; }
         public string? width { get; set; }
-        public string? format { get; set; }
-        public string? template { get; set; }
+        /// <summary>Format config from frontend: { type, template, symbol }. Supports Currency, Date, DateTime, Time, Number.</summary>
+        public ColumnFormatConfig? format { get; set; }
         public Headerstyle? headerStyle { get; set; }
         public Style? style { get; set; }
+        public string? symbol { get; set; }
+    }
+
+    /// <summary>Format configuration for a column (Currency, Date, DateTime, Time, Number).</summary>
+    public class ColumnFormatConfig
+    {
+        public string? type { get; set; }
+        public string? template { get; set; }
         public string? symbol { get; set; }
     }
 

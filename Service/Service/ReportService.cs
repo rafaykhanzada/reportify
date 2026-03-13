@@ -405,9 +405,7 @@ namespace Service.Service
                 widget.tableData.Headers = dataTable.Columns.Cast<DataColumn>()
                     .Select(c => new TabledataHeaders { column = c.ColumnName, width = "" })
                     .ToList();
-                widget.tableData.Rows = new List<List<string?>>();
-                foreach (DataRow row in dataTable.Rows)
-                    widget.tableData.Rows.Add(row.ItemArray.Select(x => x?.ToString()).ToList());
+                widget.tableData.Rows = BuildFormattedRows(dataTable, widget.tableData.Headers);
                 return;
             }
 
@@ -422,9 +420,30 @@ namespace Service.Service
                 ?? procedureResult.Columns.Cast<DataColumn>().Select(c => c.ColumnName).ToArray();
             var selectedTable = procedureResult.DefaultView.ToTable(false, columnNames);
 
-            widget.tableData.Rows = new List<List<string?>>();
-            foreach (DataRow row in selectedTable.Rows)
-                widget.tableData.Rows.Add(row.ItemArray.Select(x => x?.ToString()).ToList());
+            widget.tableData.Rows = BuildFormattedRows(selectedTable, widget.tableData.Headers);
+        }
+
+        /// <summary>
+        /// Builds row data with formatting applied per column using header format config (Currency, Date, DateTime, Time, Number).
+        /// </summary>
+        private static List<List<string?>> BuildFormattedRows(DataTable dataTable, List<TabledataHeaders?>? headers)
+        {
+            var rows = new List<List<string?>>();
+            var headerList = headers ?? new List<TabledataHeaders?>();
+
+            foreach (DataRow row in dataTable.Rows)
+            {
+                var formattedRow = new List<string?>();
+                for (var i = 0; i < row.ItemArray.Length; i++)
+                {
+                    var value = row.ItemArray[i];
+                    var header = i < headerList.Count ? headerList[i] : null;
+                    formattedRow.Add(CellFormattingUtil.FormatValue(value, header));
+                }
+                rows.Add(formattedRow);
+            }
+
+            return rows;
         }
 
         private void PopulateProceduresWidget(DynamicWidgetMeta widget, Dbmeta dbMeta, SqlConnection connection)
