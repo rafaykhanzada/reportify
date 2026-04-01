@@ -233,7 +233,7 @@ namespace Service.Service
 
                 // Parse and validate widgets metadata
                 var dbMeta = GetDbMetaFromWidgets(data.Widgets);
-                if (dbMeta?.procedureParameters == null || dbMeta.procedureParameters.Count() == 0)
+                if (dbMeta==null || dbMeta?.procedureParameters == null || dbMeta.procedureParameters.Count() == 0)
                 {
                     return new ResultModel { Success = true, Data = result };
                 }
@@ -280,7 +280,10 @@ namespace Service.Service
             try
             {
                 var meta = JsonConvert.DeserializeObject<List<DynamicWidgetMeta>>(widgetsJson);
-                return meta.Where(x => x.dbMeta != null).FirstOrDefault().dbMeta.FirstOrDefault();
+                var access = meta!.Where(x => x.dbMeta != null).FirstOrDefault();
+                if (access!=null)
+                    return access!.dbMeta!.FirstOrDefault();
+                return new Dbmeta();
             }
             catch
             {

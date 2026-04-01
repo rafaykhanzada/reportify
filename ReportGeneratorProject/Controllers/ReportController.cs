@@ -40,7 +40,7 @@ namespace ReportGeneratorReport.Controllers
         {
             if (!ModelState.IsValid)
                 return BadRequest(MessageString.ValidationError);
-            _reportService.UserId = User.Claims.FirstOrDefault()?.Value;
+            _reportService.UserId = User.Claims.FirstOrDefault()?.Value!;
             return Ok(await _reportService.CreateOrUpdate(model));
         }
 
@@ -50,7 +50,7 @@ namespace ReportGeneratorReport.Controllers
         {
             if (ModelState.IsValid)
                 return Ok(await _reportService.CreateOrUpdate(model));
-            _reportService.UserId = User.Claims.FirstOrDefault()?.Value;
+            _reportService.UserId = User.Claims.FirstOrDefault()?.Value!;
             return BadRequest();
         }
 
@@ -58,7 +58,7 @@ namespace ReportGeneratorReport.Controllers
         [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(int id)
         {
-            _reportService.UserId = User.Claims.FirstOrDefault()?.Value;
+            _reportService.UserId = User.Claims.FirstOrDefault()?.Value!;
             return Ok(await _reportService.Delete(id));
         }
         [HttpGet("export")]
