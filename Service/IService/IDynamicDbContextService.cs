@@ -21,6 +21,8 @@ namespace Service.IService
 
         Task<ResultModel> GetDatabaseSummaryAsync(string server, string database, string username, string password, string trustCertificate);
         Task<ResultModel> GetTableColumnsAsync(string server, string database, string username, string password, string trustCertificate, string tableName);
+        Task<ResultModel> GetTableColumnsAsync(string connectionString, string tableName);
+        Task<ResultModel> GetStoredProcedureColumnsAsync(string connectionString, string spName);
         Task<ResultModel> GetProcedureParametersAsync(string server, string database, string username, string password, string trustCertificate, string procedureName);
         Task<ResultModel> GetViewColumnsAsync(string server, string database, string username, string password, string trustCertificate, string viewName);
     }

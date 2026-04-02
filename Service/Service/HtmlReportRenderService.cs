@@ -112,12 +112,12 @@ namespace Service.Service
             // Generate report container
             html.AppendLine($"<div class=\"report-container\" style=\"width: {design.PageSettings.Width}mm; margin: 0 auto;\">");
 
-            // Render sections in order
-            await RenderSection(html, design, "PageHeader", dataSets, parameters);
-            await RenderSection(html, design, "ReportHeader", dataSets, parameters);
+            // Render sections in order (names match the frontend: "Page Header", "Report Header", etc.)
+            await RenderSection(html, design, "Page Header", dataSets, parameters);
+            await RenderSection(html, design, "Report Header", dataSets, parameters);
             await RenderDetailsSection(html, design, dataSets, parameters);
-            await RenderSection(html, design, "ReportFooter", dataSets, parameters);
-            await RenderSection(html, design, "PageFooter", dataSets, parameters);
+            await RenderSection(html, design, "Report Footer", dataSets, parameters);
+            await RenderSection(html, design, "Page Footer", dataSets, parameters);
 
             html.AppendLine("</div>");
 
@@ -141,7 +141,8 @@ namespace Service.Service
             if (!elements.Any())
                 return;
 
-            html.AppendLine($"    <div class=\"report-section section-{sectionName.ToLower()}\">");
+            var cssClass = sectionName.ToLower().Replace(" ", "-");
+            html.AppendLine($"    <div class=\"report-section section-{cssClass}\">");
             
             foreach (var element in elements)
             {
@@ -243,7 +244,7 @@ namespace Service.Service
             var html = new StringBuilder();
             var style = BuildInlineStyle(element);
 
-            switch (element.ElementType.ToLower())
+            switch ((element.ElementType ?? "textbox").ToLower())
             {
                 case "textbox":
                     html.Append(RenderTextBox(element, dataRow, parameters, style));

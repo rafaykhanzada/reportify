@@ -212,16 +212,19 @@ namespace Service.Service
 
         private string ReplaceFormulaReferences(string formula, FormulaContext context)
         {
-            if (context.CalculatedFields == null)
-                return formula;
-
             var matches = Regex.Matches(formula, @"@([a-zA-Z0-9_]+)");
             foreach (Match match in matches)
             {
                 var fieldName = match.Groups[1].Value;
-                if (context.CalculatedFields.ContainsKey(fieldName))
+                object? value = null;
+
+                if (context.CalculatedFields != null && context.CalculatedFields.ContainsKey(fieldName))
+                    value = context.CalculatedFields[fieldName];
+                else if (context.RunningTotals != null && context.RunningTotals.ContainsKey(fieldName))
+                    value = context.RunningTotals[fieldName];
+
+                if (value != null)
                 {
-                    var value = context.CalculatedFields[fieldName];
                     var replacement = FormatValueForFormula(value);
                     formula = formula.Replace(match.Value, replacement);
                 }
@@ -251,19 +254,23 @@ namespace Service.Service
             formula = ReplaceFunctionCall(formula, "SQRT", args => 
                 Math.Sqrt(Convert.ToDouble(args[0])).ToString());
 
-            // Aggregate functions (for group context)
-            if (context.GroupRows != null && context.GroupRows.Any())
+            // Aggregate functions — use GroupRows if available, otherwise fall back to AllData
+            var aggregateRows = context.GroupRows != null && context.GroupRows.Any()
+                ? context.GroupRows
+                : context.AllData?.AsEnumerable().ToList();
+
+            if (aggregateRows != null && aggregateRows.Any())
             {
-                formula = ReplaceAggregateFunction(formula, "SUM", context, 
-                    (rows, field) => rows.Sum(r => Convert.ToDouble(r[field])));
-                formula = ReplaceAggregateFunction(formula, "AVG", context, 
-                    (rows, field) => rows.Average(r => Convert.ToDouble(r[field])));
-                formula = ReplaceAggregateFunction(formula, "COUNT", context, 
+                formula = ReplaceAggregateFunction(formula, "SUM", aggregateRows, 
+                    (rows, field) => rows.Where(r => r[field] != DBNull.Value).Sum(r => Convert.ToDouble(r[field])));
+                formula = ReplaceAggregateFunction(formula, "AVG", aggregateRows, 
+                    (rows, field) => rows.Where(r => r[field] != DBNull.Value).Average(r => Convert.ToDouble(r[field])));
+                formula = ReplaceAggregateFunction(formula, "COUNT", aggregateRows, 
                     (rows, field) => rows.Count);
-                formula = ReplaceAggregateFunction(formula, "MIN", context, 
-                    (rows, field) => rows.Min(r => Convert.ToDouble(r[field])));
-                formula = ReplaceAggregateFunction(formula, "MAX", context, 
-                    (rows, field) => rows.Max(r => Convert.ToDouble(r[field])));
+                formula = ReplaceAggregateFunction(formula, "MIN", aggregateRows, 
+                    (rows, field) => rows.Where(r => r[field] != DBNull.Value).Min(r => Convert.ToDouble(r[field])));
+                formula = ReplaceAggregateFunction(formula, "MAX", aggregateRows, 
+                    (rows, field) => rows.Where(r => r[field] != DBNull.Value).Max(r => Convert.ToDouble(r[field])));
             }
 
             return formula;
@@ -294,7 +301,7 @@ namespace Service.Service
         }
 
         private string ReplaceAggregateFunction(string formula, string functionName, 
-            FormulaContext context, Func<List<DataRow>, string, double> aggregator)
+            List<DataRow> rows, Func<List<DataRow>, string, double> aggregator)
         {
             var pattern = $@"{functionName}\(\[([^\]]+)\]\)";
             var matches = Regex.Matches(formula, pattern, RegexOptions.IgnoreCase);
@@ -304,11 +311,8 @@ namespace Service.Service
                 try
                 {
                     var fieldName = match.Groups[1].Value;
-                    if (context.GroupRows != null && context.GroupRows.Any())
-                    {
-                        var result = aggregator(context.GroupRows, fieldName);
-                        formula = formula.Replace(match.Value, result.ToString());
-                    }
+                    var result = aggregator(rows, fieldName);
+                    formula = formula.Replace(match.Value, result.ToString());
                 }
                 catch (Exception ex)
                 {

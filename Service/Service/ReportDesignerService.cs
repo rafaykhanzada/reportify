@@ -143,6 +143,18 @@ namespace Service.Service
                             if (context.ContainsKey("Sorting"))
                                 design.Sorting = JsonConvert.DeserializeObject<List<SortingDto>>(context["Sorting"].ToString()!) 
                                     ?? new List<SortingDto>();
+
+                            if (context.ContainsKey("FormulaFields"))
+                                design.FormulaFields = JsonConvert.DeserializeObject<List<FormulaFieldDto>>(context["FormulaFields"].ToString()!) 
+                                    ?? new List<FormulaFieldDto>();
+
+                            if (context.ContainsKey("RunningTotals"))
+                                design.RunningTotals = JsonConvert.DeserializeObject<List<RunningTotalDto>>(context["RunningTotals"].ToString()!) 
+                                    ?? new List<RunningTotalDto>();
+
+                            if (context.ContainsKey("ConditionalFormats"))
+                                design.ConditionalFormats = JsonConvert.DeserializeObject<List<ConditionalFormatDto>>(context["ConditionalFormats"].ToString()!) 
+                                    ?? new List<ConditionalFormatDto>();
                         }
                     }
                     catch (Exception ex)

@@ -1,6 +1,7 @@
 using Core.Data.DTOs.ReportDesigner;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 using Service.IService;
 using System.Data;
 using System.Text;
@@ -127,9 +128,9 @@ namespace Service.Service
                 // Generate report container
                 html.AppendLine($"<div class=\"report-container\" style=\"width: {design.PageSettings.Width}mm; margin: 0 auto;\">");
 
-                // Render sections
-                await RenderSection(html, design, "PageHeader", primaryDataSet, null, parameters, calculatedFields);
-                await RenderSection(html, design, "ReportHeader", primaryDataSet, null, parameters, calculatedFields);
+                // Render sections (names match the frontend: "Page Header", "Report Header", etc.)
+                await RenderSection(html, design, "Page Header", primaryDataSet, null, parameters, calculatedFields);
+                await RenderSection(html, design, "Report Header", primaryDataSet, null, parameters, calculatedFields);
                 
                 // Render details with grouping support
                 if (design.Groups.Any())
@@ -141,8 +142,8 @@ namespace Service.Service
                     await RenderDetailsSection(html, design, primaryDataSet, parameters, calculatedFields, runningTotals);
                 }
                 
-                await RenderSection(html, design, "ReportFooter", primaryDataSet, null, parameters, calculatedFields);
-                await RenderSection(html, design, "PageFooter", primaryDataSet, null, parameters, calculatedFields);
+                await RenderSection(html, design, "Report Footer", primaryDataSet, null, parameters, calculatedFields);
+                await RenderSection(html, design, "Page Footer", primaryDataSet, null, parameters, calculatedFields);
 
                 html.AppendLine("</div>");
             }
@@ -299,7 +300,6 @@ namespace Service.Service
         {
             if (node.Children.Any())
             {
-                // Has child groups
                 foreach (var childNode in node.Children)
                 {
                     RenderGroupNode(html, design, childNode, allData, parameters, calculatedFields, runningTotals);
@@ -307,37 +307,40 @@ namespace Service.Service
             }
             else if (node.Rows != null && node.Rows.Any())
             {
-                // Leaf level - render detail rows
+                var elements = design.Elements
+                    .Where(e => e.Section == "Details")
+                    .OrderBy(e => e.ZIndex)
+                    .ToList();
+
                 int recordNumber = 1;
                 foreach (var row in node.Rows)
                 {
-                    html.AppendLine("        <div class=\"detail-row\">");
-                    
-                    var elements = design.Elements
-                        .Where(e => e.Section == "Details")
-                        .OrderBy(e => e.ZIndex)
-                        .ToList();
+                    // Update running totals BEFORE rendering so the current row's value is included
+                    UpdateRunningTotals(design, row, runningTotals);
+
+                    // Merge running totals into calculatedFields so @RunningTotalName resolves
+                    var mergedFields = new Dictionary<string, object>(calculatedFields);
+                    foreach (var kvp in runningTotals)
+                        mergedFields[kvp.Key] = kvp.Value;
 
                     var context = new FormulaContext
                     {
                         CurrentRow = row,
                         AllData = allData,
                         Parameters = parameters,
-                        CalculatedFields = calculatedFields,
+                        CalculatedFields = mergedFields,
                         RunningTotals = runningTotals.ToDictionary(k => k.Key, v => (object)v.Value),
                         RecordNumber = recordNumber++
                     };
 
-                    // Update running totals
-                    UpdateRunningTotals(design, row, runningTotals);
+                    html.AppendLine("        <div class=\"detail-row\">");
 
                     foreach (var element in elements)
                     {
-                        // Apply conditional formatting
                         var appliedElement = ApplyConditionalFormatting(element, design.ConditionalFormats, context);
-                        html.AppendLine(RenderElement(appliedElement, row, parameters, calculatedFields, context));
+                        html.AppendLine(RenderElement(appliedElement, row, parameters, mergedFields, context));
                     }
-                    
+
                     html.AppendLine("        </div>");
                 }
             }
@@ -348,24 +351,52 @@ namespace Service.Service
             Dictionary<string, object> calculatedFields, Dictionary<string, double> runningTotals)
         {
             var group = node.GroupDefinition!;
-            var groupContext = new FormulaContext
+
+            // Merge group summaries into calculatedFields so elements can reference them via @SummaryName
+            var groupSummaries = CalculateGroupSummaries(group, node.Rows!, new FormulaContext
             {
                 GroupRows = node.Rows,
                 AllData = allData,
                 Parameters = parameters,
-                CalculatedFields = calculatedFields,
+                CalculatedFields = calculatedFields
+            });
+            var mergedFields = new Dictionary<string, object>(calculatedFields);
+            foreach (var kvp in groupSummaries)
+                mergedFields[kvp.Key] = kvp.Value;
+
+            var groupContext = new FormulaContext
+            {
+                CurrentRow = node.Rows?.FirstOrDefault(),
+                GroupRows = node.Rows,
+                AllData = allData,
+                Parameters = parameters,
+                CalculatedFields = mergedFields,
+                RunningTotals = runningTotals.ToDictionary(k => k.Key, v => (object)v.Value),
                 GroupValues = new Dictionary<string, object> { { group.GroupName, node.GroupValue } }
             };
 
-            // Calculate group summaries
-            var groupSummaries = CalculateGroupSummaries(group, node.Rows!, groupContext);
+            // Reset running totals that are configured to reset on this group
+            ResetRunningTotals(design, group.GroupName, runningTotals);
 
             // Render group header
             if (group.ShowHeader)
             {
+                var headerSectionName = $"Group Header {group.Level}";
+                var headerElements = design.Elements
+                    .Where(e => e.Section == headerSectionName)
+                    .OrderBy(e => e.ZIndex)
+                    .ToList();
+
                 html.AppendLine($"        <div class=\"group-header group-level-{group.Level}\">");
-                
-                if (!string.IsNullOrEmpty(group.HeaderTemplate))
+
+                if (headerElements.Any())
+                {
+                    foreach (var element in headerElements)
+                    {
+                        html.AppendLine(RenderElement(element, groupContext.CurrentRow, parameters, mergedFields, groupContext));
+                    }
+                }
+                else if (!string.IsNullOrEmpty(group.HeaderTemplate))
                 {
                     var headerText = _formulaEvaluationService.EvaluateAsString(group.HeaderTemplate, groupContext);
                     html.AppendLine($"            <strong>{headerText}</strong>");
@@ -375,51 +406,74 @@ namespace Service.Service
                     html.AppendLine($"            <strong>{group.GroupName}: {node.GroupValue}</strong>");
                 }
 
-                // Show summaries in header if configured
                 if (group.Summaries != null)
                 {
                     foreach (var summary in group.Summaries.Where(s => s.ShowInHeader))
                     {
-                        var value = groupSummaries[summary.Name];
-                        var formatted = !string.IsNullOrEmpty(summary.Format) 
-                            ? string.Format($"{{0:{summary.Format}}}", value) 
-                            : value.ToString();
-                        html.AppendLine($"            <span class=\"group-summary\">{summary.Label ?? summary.Name}: {formatted}</span>");
+                        if (groupSummaries.TryGetValue(summary.Name, out var value))
+                        {
+                            var formatted = !string.IsNullOrEmpty(summary.Format)
+                                ? string.Format($"{{0:{summary.Format}}}", value)
+                                : value.ToString();
+                            html.AppendLine($"            <span class=\"group-summary\">{summary.Label ?? summary.Name}: {formatted}</span>");
+                        }
                     }
                 }
-                
+
                 html.AppendLine("        </div>");
             }
 
-            // Render child groups or details
+            // Render child groups or detail rows
             RenderGroupLevel(html, design, node, node.Level, allData, parameters, calculatedFields, runningTotals);
 
             // Render group footer
             if (group.ShowFooter)
             {
+                // Refresh mergedFields after detail rows (running totals may have changed)
+                mergedFields = new Dictionary<string, object>(calculatedFields);
+                foreach (var kvp in groupSummaries)
+                    mergedFields[kvp.Key] = kvp.Value;
+                foreach (var kvp in runningTotals)
+                    mergedFields[kvp.Key] = kvp.Value;
+
+                groupContext.CalculatedFields = mergedFields;
+                groupContext.RunningTotals = runningTotals.ToDictionary(k => k.Key, v => (object)v.Value);
+
+                var footerSectionName = $"Group Footer {group.Level}";
+                var footerElements = design.Elements
+                    .Where(e => e.Section == footerSectionName)
+                    .OrderBy(e => e.ZIndex)
+                    .ToList();
+
                 html.AppendLine($"        <div class=\"group-footer group-level-{group.Level}\">");
-                
-                if (!string.IsNullOrEmpty(group.FooterTemplate))
+
+                if (footerElements.Any())
+                {
+                    foreach (var element in footerElements)
+                    {
+                        html.AppendLine(RenderElement(element, groupContext.CurrentRow, parameters, mergedFields, groupContext));
+                    }
+                }
+                else if (!string.IsNullOrEmpty(group.FooterTemplate))
                 {
                     var footerText = _formulaEvaluationService.EvaluateAsString(group.FooterTemplate, groupContext);
                     html.AppendLine($"            {footerText}");
                 }
-                else
+
+                if (group.Summaries != null)
                 {
-                    // Show summaries in footer
-                    if (group.Summaries != null)
+                    foreach (var summary in group.Summaries.Where(s => s.ShowInFooter))
                     {
-                        foreach (var summary in group.Summaries.Where(s => s.ShowInFooter))
+                        if (groupSummaries.TryGetValue(summary.Name, out var value))
                         {
-                            var value = groupSummaries[summary.Name];
-                            var formatted = !string.IsNullOrEmpty(summary.Format) 
-                                ? string.Format($"{{0:{summary.Format}}}", value) 
+                            var formatted = !string.IsNullOrEmpty(summary.Format)
+                                ? string.Format($"{{0:{summary.Format}}}", value)
                                 : value.ToString();
                             html.AppendLine($"            <div class=\"group-summary\"><strong>{summary.Label ?? summary.Name}:</strong> {formatted}</div>");
                         }
                     }
                 }
-                
+
                 html.AppendLine("        </div>");
             }
         }
@@ -472,20 +526,57 @@ namespace Service.Service
         {
             foreach (var rt in design.RunningTotals)
             {
-                if (row.Table.Columns.Contains(rt.Field) && row[rt.Field] != DBNull.Value)
+                if (!row.Table.Columns.Contains(rt.Field) || row[rt.Field] == DBNull.Value)
                 {
-                    var value = Convert.ToDouble(row[rt.Field]);
-                    
-                    switch (rt.Function)
-                    {
-                        case AggregateFunction.Sum:
-                            runningTotals[rt.Name] += value;
-                            break;
-                        case AggregateFunction.Count:
-                            runningTotals[rt.Name]++;
-                            break;
-                        // Add more functions as needed
-                    }
+                    if (rt.Function == AggregateFunction.Count)
+                        runningTotals[rt.Name]++;
+                    continue;
+                }
+
+                var value = Convert.ToDouble(row[rt.Field]);
+
+                switch (rt.Function)
+                {
+                    case AggregateFunction.Sum:
+                        runningTotals[rt.Name] += value;
+                        break;
+                    case AggregateFunction.Count:
+                        runningTotals[rt.Name]++;
+                        break;
+                    case AggregateFunction.Average:
+                        var countKey = $"__{rt.Name}_count";
+                        var sumKey = $"__{rt.Name}_sum";
+                        if (!runningTotals.ContainsKey(countKey)) runningTotals[countKey] = 0;
+                        if (!runningTotals.ContainsKey(sumKey)) runningTotals[sumKey] = 0;
+                        runningTotals[countKey]++;
+                        runningTotals[sumKey] += value;
+                        runningTotals[rt.Name] = runningTotals[sumKey] / runningTotals[countKey];
+                        break;
+                    case AggregateFunction.Min:
+                        runningTotals[rt.Name] = runningTotals[rt.Name] == 0
+                            ? value
+                            : Math.Min(runningTotals[rt.Name], value);
+                        break;
+                    case AggregateFunction.Max:
+                        runningTotals[rt.Name] = Math.Max(runningTotals[rt.Name], value);
+                        break;
+                }
+            }
+        }
+
+        private void ResetRunningTotals(ReportDesignDto design, string groupName, Dictionary<string, double> runningTotals)
+        {
+            foreach (var rt in design.RunningTotals)
+            {
+                if (rt.ResetTime == "OnChangeOfGroup" &&
+                    string.Equals(rt.ResetOn, groupName, StringComparison.OrdinalIgnoreCase))
+                {
+                    runningTotals[rt.Name] = 0;
+
+                    var countKey = $"__{rt.Name}_count";
+                    var sumKey = $"__{rt.Name}_sum";
+                    if (runningTotals.ContainsKey(countKey)) runningTotals[countKey] = 0;
+                    if (runningTotals.ContainsKey(sumKey)) runningTotals[sumKey] = 0;
                 }
             }
         }
@@ -554,7 +645,6 @@ namespace Service.Service
             return values.Sum(v => Math.Pow(v - avg, 2)) / values.Count;
         }
 
-        // Implement interface methods (delegating to existing implementation or using new logic)
         private async Task RenderSection(StringBuilder html, ReportDesignDto design, string sectionName, 
             DataTable dataTable, DataRow? row, Dictionary<string, object>? parameters, 
             Dictionary<string, object> calculatedFields)
@@ -567,7 +657,8 @@ namespace Service.Service
             if (!elements.Any())
                 return;
 
-            html.AppendLine($"    <div class=\"report-section section-{sectionName.ToLower()}\">");
+            var cssClass = sectionName.ToLower().Replace(" ", "-");
+            html.AppendLine($"    <div class=\"report-section section-{cssClass}\">");
             
             var dataRow = row ?? (dataTable.Rows.Count > 0 ? dataTable.Rows[0] : null);
             var context = new FormulaContext
@@ -600,25 +691,30 @@ namespace Service.Service
             int recordNumber = 1;
             foreach (DataRow row in dataTable.Rows)
             {
-                html.AppendLine("        <div class=\"detail-row\">");
-                
+                UpdateRunningTotals(design, row, runningTotals);
+
+                var mergedFields = new Dictionary<string, object>(calculatedFields);
+                foreach (var kvp in runningTotals)
+                    mergedFields[kvp.Key] = kvp.Value;
+
                 var context = new FormulaContext
                 {
                     CurrentRow = row,
                     AllData = dataTable,
                     Parameters = parameters,
-                    CalculatedFields = calculatedFields,
+                    CalculatedFields = mergedFields,
                     RunningTotals = runningTotals.ToDictionary(k => k.Key, v => (object)v.Value),
                     RecordNumber = recordNumber++
                 };
 
-                UpdateRunningTotals(design, row, runningTotals);
+                html.AppendLine("        <div class=\"detail-row\">");
 
                 foreach (var element in elements)
                 {
-                    html.AppendLine(RenderElement(element, row, parameters, calculatedFields, context));
+                    var appliedElement = ApplyConditionalFormatting(element, design.ConditionalFormats, context);
+                    html.AppendLine(RenderElement(appliedElement, row, parameters, mergedFields, context));
                 }
-                
+
                 html.AppendLine("        </div>");
             }
 
@@ -635,55 +731,117 @@ namespace Service.Service
             Dictionary<string, object>? parameters, Dictionary<string, object> calculatedFields, 
             FormulaContext context)
         {
-            // Use existing HtmlReportRenderService logic but with formula evaluation
-            var value = GetElementValue(element, dataRow, parameters, calculatedFields, context);
-            
-            // Simplified rendering (use actual implementation from HtmlReportRenderService)
+            var elementType = (element.ElementType ?? "textbox").ToLower();
             var style = BuildInlineStyle(element);
-            return $"<div class=\"element element-{element.ElementType.ToLower()}\" style=\"{style}\">{value}</div>";
+            var value = GetElementValue(element, dataRow, parameters, calculatedFields, context);
+            var encoded = System.Net.WebUtility.HtmlEncode(value ?? "");
+
+            return elementType switch
+            {
+                "textbox" => $"<div class=\"element element-textbox\" style=\"{style}\">{encoded}</div>",
+                "line" => $"<hr class=\"element element-line\" style=\"{style}\" />",
+                "rectangle" => $"<div class=\"element element-rectangle\" style=\"{style}\"></div>",
+                "image" => RenderImageElement(element, style),
+                _ => $"<div class=\"element element-{elementType}\" style=\"{style}\">{encoded}</div>"
+            };
+        }
+
+        private string RenderImageElement(ReportElementDto element, string style)
+        {
+            var props = DeserializeProperties<ImagePropertiesDto>(element.Properties);
+            var src = props?.Source ?? "";
+            var alt = props?.AlternateText ?? "";
+            return $"<img class=\"element element-image\" src=\"{src}\" alt=\"{alt}\" style=\"{style}\" />";
         }
 
         private string? GetElementValue(ReportElementDto element, DataRow? dataRow, 
             Dictionary<string, object>? parameters, Dictionary<string, object> calculatedFields, 
             FormulaContext context)
         {
-            if (element.DataBinding == null)
-                return null;
-
-            if (!string.IsNullOrEmpty(element.DataBinding.Formula))
+            if (element.DataBinding != null)
             {
-                context.CalculatedFields = calculatedFields;
-                return _formulaEvaluationService.EvaluateAsString(element.DataBinding.Formula, context, element.DataBinding.Format);
-            }
-
-            if (!string.IsNullOrEmpty(element.DataBinding.Field) && dataRow != null && dataRow.Table.Columns.Contains(element.DataBinding.Field))
-            {
-                var value = dataRow[element.DataBinding.Field];
-                if (!string.IsNullOrEmpty(element.DataBinding.Format) && value != null && value != DBNull.Value)
+                if (!string.IsNullOrEmpty(element.DataBinding.Formula))
                 {
-                    return string.Format($"{{0:{element.DataBinding.Format}}}", value);
+                    context.CalculatedFields = calculatedFields;
+                    return _formulaEvaluationService.EvaluateAsString(element.DataBinding.Formula, context, element.DataBinding.Format);
                 }
-                return value?.ToString();
+
+                if (!string.IsNullOrEmpty(element.DataBinding.Field) && dataRow != null 
+                    && dataRow.Table.Columns.Contains(element.DataBinding.Field))
+                {
+                    var value = dataRow[element.DataBinding.Field];
+                    if (!string.IsNullOrEmpty(element.DataBinding.Format) && value != null && value != DBNull.Value)
+                    {
+                        return string.Format($"{{0:{element.DataBinding.Format}}}", value);
+                    }
+                    return value?.ToString();
+                }
             }
 
-            return null;
+            // Fall back to static text from Properties
+            var props = DeserializeProperties<TextBoxPropertiesDto>(element.Properties);
+            return props?.StaticText;
+        }
+
+        private T? DeserializeProperties<T>(object? properties) where T : class
+        {
+            if (properties == null) return null;
+            if (properties is T typed) return typed;
+
+            try
+            {
+                return JsonConvert.DeserializeObject<T>(properties.ToString()!);
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         private string BuildInlineStyle(ReportElementDto element)
         {
-            // Reuse logic from HtmlReportRenderService
             var styles = new List<string>();
-            styles.Add($"position: absolute");
-            styles.Add($"left: {element.Layout.X}mm");
-            styles.Add($"top: {element.Layout.Y}mm");
-            styles.Add($"width: {element.Layout.Width}mm");
-            styles.Add($"height: {element.Layout.Height}mm");
-            
-            if (!string.IsNullOrEmpty(element.Style.Color))
-                styles.Add($"color: {element.Style.Color}");
-            if (!string.IsNullOrEmpty(element.Style.BackgroundColor))
-                styles.Add($"background-color: {element.Style.BackgroundColor}");
-            
+            var layout = element.Layout;
+            var s = element.Style;
+
+            styles.Add("position: absolute");
+            styles.Add($"left: {layout.X.ToString(System.Globalization.CultureInfo.InvariantCulture)}px");
+            styles.Add($"top: {layout.Y.ToString(System.Globalization.CultureInfo.InvariantCulture)}px");
+            styles.Add($"width: {layout.Width.ToString(System.Globalization.CultureInfo.InvariantCulture)}px");
+            styles.Add($"height: {layout.Height.ToString(System.Globalization.CultureInfo.InvariantCulture)}px");
+
+            if (!string.IsNullOrEmpty(s.FontFamily))
+                styles.Add($"font-family: {s.FontFamily}");
+            if (s.FontSize.HasValue)
+                styles.Add($"font-size: {s.FontSize}px");
+            if (!string.IsNullOrEmpty(s.FontWeight) && s.FontWeight != "normal")
+                styles.Add($"font-weight: {s.FontWeight}");
+            if (!string.IsNullOrEmpty(s.FontStyle) && s.FontStyle != "normal")
+                styles.Add($"font-style: {s.FontStyle}");
+            if (!string.IsNullOrEmpty(s.TextDecoration) && s.TextDecoration != "none")
+                styles.Add($"text-decoration: {s.TextDecoration}");
+            if (!string.IsNullOrEmpty(s.TextAlign) && s.TextAlign != "left")
+                styles.Add($"text-align: {s.TextAlign}");
+            if (!string.IsNullOrEmpty(s.Color))
+                styles.Add($"color: {s.Color}");
+            if (!string.IsNullOrEmpty(s.BackgroundColor))
+                styles.Add($"background-color: {s.BackgroundColor}");
+
+            if (s.Border != null && s.Border.Style != "none")
+            {
+                styles.Add($"border: {s.Border.Width ?? 1}px {s.Border.Style} {s.Border.Color ?? "#000"}");
+                if (s.Border.Radius.HasValue && s.Border.Radius > 0)
+                    styles.Add($"border-radius: {s.Border.Radius}px");
+            }
+
+            if (s.Padding != null)
+                styles.Add($"padding: {s.Padding.Top}px {s.Padding.Right}px {s.Padding.Bottom}px {s.Padding.Left}px");
+
+            if (s.Opacity.HasValue && s.Opacity < 1.0)
+                styles.Add($"opacity: {s.Opacity}");
+
+            styles.Add("overflow: hidden");
+
             return string.Join("; ", styles);
         }
 

@@ -1,4 +1,5 @@
 using Core.Data.DTOs.ReportDesigner;
+using Core.Utils;
 using Microsoft.AspNetCore.Mvc;
 using Service.IService;
 
@@ -148,6 +149,49 @@ namespace ReportGeneratorProject.Controllers
             _reportDesignerService.UserId = User.Claims.FirstOrDefault()?.Value ?? "system";
             var result = await _reportDesignerService.DeleteElement(elementId);
             return Ok(result);
+        }
+
+        /// <summary>
+        /// Save a full report design from the frontend designer format.
+        /// Accepts the frontend JSON schema (with groups, running totals, formula fields,
+        /// and the frontend element format) and converts it to the internal format.
+        /// </summary>
+        [HttpPost("design")]
+        public async Task<IActionResult> SaveDesign([FromBody] FrontendReportDesignDto model)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            _reportDesignerService.UserId = User.Claims.FirstOrDefault()?.Value ?? "system";
+
+            var reportDesign = model.ToReportDesignDto();
+            var result = await _reportDesignerService.CreateOrUpdate(reportDesign);
+
+            if (result.Success)
+                return Ok(result);
+            else
+                return BadRequest(result);
+        }
+
+        /// <summary>
+        /// Update a full report design from the frontend designer format.
+        /// </summary>
+        [HttpPut("design/{id}")]
+        public async Task<IActionResult> UpdateDesign(int id, [FromBody] FrontendReportDesignDto model)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            model.Id = id;
+            _reportDesignerService.UserId = User.Claims.FirstOrDefault()?.Value ?? "system";
+
+            var reportDesign = model.ToReportDesignDto();
+            var result = await _reportDesignerService.CreateOrUpdate(reportDesign);
+
+            if (result.Success)
+                return Ok(result);
+            else
+                return BadRequest(result);
         }
     }
 }

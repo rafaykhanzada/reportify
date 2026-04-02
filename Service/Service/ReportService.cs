@@ -33,6 +33,7 @@ namespace Service.Service
         private readonly IDynamicDbContextService _dynamicDbContextService = dynamicDbContextService;
         private readonly IFormulaEvaluationService _formulaEvaluationService = formulaEvaluationService;
 
+
         public async Task<ResultModel> CreateOrUpdate(ReportDto model)
         {
             try
@@ -59,7 +60,6 @@ namespace Service.Service
                 else
                 {
                     data.CreatedOn = DateTime.Now;
-                    //data.UpdatedOn = DateTime.Now;
                     data.Project = null;
                     data.CreatedBy = UserId;
                     _unitOfWork.ReportRepository.Insert(data);
@@ -127,7 +127,6 @@ namespace Service.Service
             try
             {
                 #region Filter
-                // Set Predicate
                 Expression<Func<Report, bool>> predicate = x => x.DeletedOn == null;
                 if (!string.IsNullOrEmpty(model.SearchBy))
                     predicate = BaseUtil.AddSearchCriteria<Report>(model, predicate);
@@ -148,64 +147,6 @@ namespace Service.Service
             return _resultModel;
         }
 
-        //public async Task<ResultModel> Get(int id)
-        //{
-        //    try
-        //    {
-        //        List<DynamicWidgetMeta> dbwidgets = new();
-        //        List<DynamicWidgetMeta> meta = new();
-        //        List<StoredProcedureParameterDto> sqlParameters = [];
-        //        var data = _unitOfWork.ReportRepository.Get(x => x.DeletedOn == null && x.Id == id).FirstOrDefault();
-        //        if (data.Widgets != null)
-        //            meta = JsonConvert.DeserializeObject<List<DynamicWidgetMeta>>(data.Widgets)!;
-        //        if (data != null)
-        //        {
-        //            var result = _mapper.Map<ReportDto>(data);
-        //            if (result.Connection != null)
-        //            {
-        //                var dbMeta = meta.FirstOrDefault().dbMeta.FirstOrDefault();
-        //                if (dbMeta!=null)
-        //                {
-        //                    var parameters = dbMeta.procedureParameters;
-        //                    foreach (var parameter in parameters)
-        //                    {
-        //                        sqlParameters.Add(new StoredProcedureParameterDto
-        //                        {
-        //                            Name = parameter.name,
-        //                            Value = parameter.value,
-        //                            DataType = parameter.dataType
-        //                        });
-        //                    }
-        //                    string connectionString = result.Connection! + ";TrustServerCertificate=True";
-        //                    var dataset = await _dynamicDbContextService.ExecuteStoredProcedureSchemaAsync(connectionString, result.Table, sqlParameters);
-        //                    if (dataset.Success == true && dataset.Data != null)
-        //                    {
-        //                        result.Object = new DynamicDbObject
-        //                        {
-        //                            ObjectName = result.Table,
-        //                            Columns = (List<DynamicDbSchema>)dataset.Data
-        //                        };
-        //                    }
-        //                }
-        //            }
-        //            _resultModel.Success = true;
-        //            _resultModel.Data = result;
-        //        }
-        //        else
-        //        {
-        //            _logger.LogInformation(MessageString.NotFound);
-        //            _resultModel.Success = true;
-        //            _resultModel.Message = MessageString.NotFound;
-        //        }
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        _logger.LogError("Error:", ex);
-        //        _resultModel.Success = false;
-        //        _resultModel.Message = MessageString.ServerError;
-        //    }
-        //    return _resultModel;
-        //}
         public async Task<ResultModel> Get(int id)
         {
             try
@@ -217,28 +158,29 @@ namespace Service.Service
                 if (data == null)
                 {
                     _logger.LogInformation(MessageString.NotFound);
-                    return new ResultModel
-                    {
-                        Success = true,
-                        Message = MessageString.NotFound
-                    };
+                    return new ResultModel { Success = true, Message = MessageString.NotFound };
                 }
 
                 var result = _mapper.Map<ReportDto>(data);
+                var design = ParseReportDesign(data.Widgets);
 
-                if (string.IsNullOrWhiteSpace(result.Connection))
-                {
+                var connStr = result.Connection
+                    ?? design?.dataSources?.FirstOrDefault()?.connectionString;
+                if (string.IsNullOrWhiteSpace(connStr))
                     return new ResultModel { Success = true, Data = result };
-                }
 
-                // Parse and validate widgets metadata
-                var dbMeta = GetDbMetaFromWidgets(data.Widgets);
-                if (dbMeta==null || dbMeta?.procedureParameters == null || dbMeta.procedureParameters.Count() == 0)
+                var dbMeta = GetDbMetaFromElements(design?.elements);
+                if (dbMeta?.procedureParameters == null || dbMeta.procedureParameters.Length == 0)
                 {
-                    return new ResultModel { Success = true, Data = result };
+                        var cols = await _dynamicDbContextService.GetStoredProcedureColumnsAsync(connStr, result.Table!);
+                    result.Object = new DynamicDbObject
+                    {
+                        Columns = (List<DynamicDbSchema>?)cols.Data,
+                        ObjectName = result.Table,
+                        Parameter = design.dataSources.FirstOrDefault()!.parameters
+                    };
+                  return new ResultModel { Success = true, Data = result };
                 }
-
-                // Build SQL parameters
                 var sqlParameters = dbMeta.procedureParameters
                     .Select(p => new StoredProcedureParameterDto
                     {
@@ -248,8 +190,7 @@ namespace Service.Service
                     })
                     .ToList();
 
-                // Execute stored procedure
-                string connectionString = $"{result.Connection};TrustServerCertificate=True";
+                string connectionString = $"{connStr.TrimEnd(';')};TrustServerCertificate=True";
                 var dataset = await _dynamicDbContextService
                     .ExecuteStoredProcedureSchemaAsync(connectionString, dbMeta.table, sqlParameters);
 
@@ -272,24 +213,6 @@ namespace Service.Service
             }
         }
 
-        private Dbmeta? GetDbMetaFromWidgets(string? widgetsJson)
-        {
-            if (string.IsNullOrWhiteSpace(widgetsJson))
-                return null;
-
-            try
-            {
-                var meta = JsonConvert.DeserializeObject<List<DynamicWidgetMeta>>(widgetsJson);
-                var access = meta!.Where(x => x.dbMeta != null).FirstOrDefault();
-                if (access!=null)
-                    return access!.dbMeta!.FirstOrDefault();
-                return new Dbmeta();
-            }
-            catch
-            {
-                return null;
-            }
-        }
         public ResultModel GetPreview(int id)
         {
             try
@@ -304,27 +227,33 @@ namespace Service.Service
                     return new ResultModel { Success = true, Message = MessageString.NotFound };
                 }
 
-                var meta = ParseWidgetMeta(report.Widgets);
-                if (meta is { Count: > 0 } && !string.IsNullOrWhiteSpace(report.Connection))
+                var design = ParseReportDesign(report.Widgets);
+                var elements = design?.elements ?? new List<Element>();
+
+                var connStr = report.Connection
+                    ?? design?.dataSources?.FirstOrDefault()?.connectionString;
+
+                if (elements.Count > 0 && !string.IsNullOrWhiteSpace(connStr))
                 {
-                    var connectionString = report.Connection.TrimEnd(';') + TrustServerCertificateSuffix;
+                    var connectionString = connStr.TrimEnd(';') + TrustServerCertificateSuffix;
                     using var connection = new SqlConnection(connectionString);
                     connection.Open();
 
-                    foreach (var widget in meta.Where(w => w.dbMeta != null && w.dbMeta.Length > 0))
+                    foreach (var element in elements.Where(e => e.dbMeta != null && e.dbMeta.Length > 0))
                     {
-                        var dbMeta = widget.dbMeta![0];
+                        var dbMeta = element.dbMeta![0];
                         try
                         {
-                            PopulateWidgetPreview(widget, dbMeta, connection);
+                            PopulateElementPreview(element, dbMeta, connection);
                         }
                         catch (Exception ex)
                         {
-                            _logger.LogWarning(ex, "Failed to populate widget {WidgetId} for report {ReportId}", widget.id, id);
+                            _logger.LogWarning(ex, "Failed to populate element {ElementId} for report {ReportId}", element.id, id);
                         }
                     }
 
-                    report.Widgets = JsonConvert.SerializeObject(meta);
+                    design!.elements = elements;
+                    report.Widgets = JsonConvert.SerializeObject(design);
                 }
 
                 var result = _mapper.Map<ReportDto>(report);
@@ -337,59 +266,74 @@ namespace Service.Service
             }
         }
 
-        private static List<DynamicWidgetMeta> ParseWidgetMeta(string? widgetsJson)
+        #region Parsing Helpers
+
+        private static ReportDesignMeta? ParseReportDesign(string? widgetsJson)
         {
             if (string.IsNullOrWhiteSpace(widgetsJson))
-                return new List<DynamicWidgetMeta>();
+                return null;
             try
             {
-                return JsonConvert.DeserializeObject<List<DynamicWidgetMeta>>(widgetsJson) ?? new List<DynamicWidgetMeta>();
+                return JsonConvert.DeserializeObject<ReportDesignMeta>(widgetsJson);
             }
             catch
             {
-                return new List<DynamicWidgetMeta>();
+                return null;
             }
         }
 
-        private void PopulateWidgetPreview(DynamicWidgetMeta widget, Dbmeta dbMeta, SqlConnection connection)
+        private static Dbmeta? GetDbMetaFromElements(List<Element>? elements)
+        {
+            if (elements == null || elements.Count == 0)
+                return null;
+
+            var element = elements.FirstOrDefault(e => e.dbMeta != null && e.dbMeta.Length > 0);
+            return element?.dbMeta?.FirstOrDefault();
+        }
+
+        #endregion
+
+        #region Element Preview Population
+
+        private void PopulateElementPreview(Element element, Dbmeta dbMeta, SqlConnection connection)
         {
             if (dbMeta.tabletype == TableTypeFormula)
             {
-                PopulateFormulaWidget(widget, dbMeta, connection);
+                PopulateFormulaWidget(element, dbMeta, connection);
                 return;
             }
 
-            switch (widget.type)
+            switch (element.type)
             {
                 case WidgetTypeTextbox:
-                    PopulateTextboxWidget(widget, dbMeta, connection);
+                    PopulateTextboxWidget(element, dbMeta, connection);
                     break;
                 case WidgetTypeTable:
-                    PopulateTableWidget(widget, dbMeta, connection);
+                    PopulateTableWidget(element, dbMeta, connection);
                     break;
                 case WidgetTypeProcedures:
-                    PopulateProceduresWidget(widget, dbMeta, connection);
+                    PopulateProceduresWidget(element, dbMeta, connection);
                     break;
                 case WidgetTypeFormula:
-                    PopulateFormulaWidget(widget, dbMeta, connection);
+                    PopulateFormulaWidget(element, dbMeta, connection);
                     break;
             }
         }
 
-        private void PopulateTextboxWidget(DynamicWidgetMeta widget, Dbmeta dbMeta, SqlConnection connection)
+        private void PopulateTextboxWidget(Element element, Dbmeta dbMeta, SqlConnection connection)
         {
             if (dbMeta.tabletype == TableTypeTable && !string.IsNullOrWhiteSpace(dbMeta.column) && !string.IsNullOrWhiteSpace(dbMeta.table))
             {
                 var query = $"SELECT TOP 1 {dbMeta.column} FROM {dbMeta.table}";
-                widget.text = DbUtil.RawSqlQuery<string>(query, x => x[0].ToString(), connection).FirstOrDefault();
+                element.text = DbUtil.RawSqlQuery<string>(query, x => x[0].ToString(), connection).FirstOrDefault();
                 return;
             }
 
             if (dbMeta.tabletype == TableTypeProcedure && !string.IsNullOrWhiteSpace(dbMeta.procedureName))
             {
                 var parameters = dbMeta.procedureParameters?.ToList() ?? new List<Procedureparameter>();
-                var columnName = widget.text ?? dbMeta.column ?? " ";
-                widget.text = DbUtil.RawSqlQuery<string>(
+                var columnName = element.text ?? dbMeta.column ?? " ";
+                element.text = DbUtil.RawSqlQuery<string>(
                     dbMeta.procedureName,
                     parameters,
                     x => x[columnName].ToString(),
@@ -398,17 +342,17 @@ namespace Service.Service
             }
         }
 
-        private void PopulateTableWidget(DynamicWidgetMeta widget, Dbmeta dbMeta, SqlConnection connection)
+        private void PopulateTableWidget(Element element, Dbmeta dbMeta, SqlConnection connection)
         {
             if (dbMeta.tabletype == TableTypeTable && !string.IsNullOrWhiteSpace(dbMeta.column) && !string.IsNullOrWhiteSpace(dbMeta.table))
             {
                 var query = $"SELECT TOP 10 {dbMeta.column} FROM {dbMeta.table}";
                 var dataTable = DbUtil.GetAllDBRows(query, connection);
-                widget.tableData ??= new Tabledata();
-                widget.tableData.Headers = dataTable.Columns.Cast<DataColumn>()
+                element.tableData ??= new Tabledata();
+                element.tableData.Headers = dataTable.Columns.Cast<DataColumn>()
                     .Select(c => new TabledataHeaders { column = c.ColumnName, width = "" })
                     .ToList();
-                widget.tableData.Rows = BuildFormattedRows(dataTable, widget.tableData.Headers);
+                element.tableData.Rows = BuildFormattedRows(dataTable, element.tableData.Headers);
                 return;
             }
 
@@ -416,19 +360,16 @@ namespace Service.Service
                 return;
 
             var procedureResult = DbUtil.GetAllDBRows(dbMeta.procedureName, connection, dbMeta.procedureParameters?.ToList());
-            widget.tableData ??= new Tabledata();
+            element.tableData ??= new Tabledata();
 
-            var columnNames = widget.tableData.Rows?.FirstOrDefault()
+            var columnNames = element.tableData.Rows?.FirstOrDefault()
                 ?.Select(c => c ?? string.Empty).ToArray()
                 ?? procedureResult.Columns.Cast<DataColumn>().Select(c => c.ColumnName).ToArray();
             var selectedTable = procedureResult.DefaultView.ToTable(false, columnNames);
 
-            widget.tableData.Rows = BuildFormattedRows(selectedTable, widget.tableData.Headers);
+            element.tableData.Rows = BuildFormattedRows(selectedTable, element.tableData.Headers);
         }
 
-        /// <summary>
-        /// Builds row data with formatting applied per column using header format config (Currency, Date, DateTime, Time, Number).
-        /// </summary>
         private static List<List<string?>> BuildFormattedRows(DataTable dataTable, List<TabledataHeaders?>? headers)
         {
             var rows = new List<List<string?>>();
@@ -449,7 +390,7 @@ namespace Service.Service
             return rows;
         }
 
-        private void PopulateProceduresWidget(DynamicWidgetMeta widget, Dbmeta dbMeta, SqlConnection connection)
+        private void PopulateProceduresWidget(Element element, Dbmeta dbMeta, SqlConnection connection)
         {
             if (dbMeta.tabletype != TableTypeTable || string.IsNullOrWhiteSpace(dbMeta.procedureName))
                 return;
@@ -458,9 +399,9 @@ namespace Service.Service
             DbUtil.GetAllDBRows(query, connection);
         }
 
-        private void PopulateFormulaWidget(DynamicWidgetMeta widget, Dbmeta dbMeta, SqlConnection connection)
+        private void PopulateFormulaWidget(Element element, Dbmeta dbMeta, SqlConnection connection)
         {
-            var formula = dbMeta.formula ?? widget.miscValues?.formula;
+            var formula = dbMeta.formula ?? element.miscValues?.formula;
             if (string.IsNullOrWhiteSpace(formula) || string.IsNullOrWhiteSpace(dbMeta.procedureName))
                 return;
 
@@ -486,16 +427,17 @@ namespace Service.Service
                 Parameters = contextParams
             };
 
-            var result = _formulaEvaluationService.EvaluateAsString(formula, context);
-            widget.text = result ?? widget.text;
+            var evalResult = _formulaEvaluationService.EvaluateAsString(formula, context);
+            element.text = evalResult ?? element.text;
         }
+
+        #endregion
 
         public async Task<int> GetCount()
         {
             try
             {
                 return await _unitOfWork.ReportRepository.GetCountAsync();
-
             }
             catch (Exception ex)
             {
@@ -503,6 +445,7 @@ namespace Service.Service
             }
             return 0;
         }
+
         public async Task<ResultModel> Export(string? Type, FilterDto? model)
         {
             try
@@ -521,7 +464,6 @@ namespace Service.Service
                     return _resultModel;
                 }
                 var EmailVm = _mapper.Map<List<ReportDto>>(data);
-                //await PopulateDealerNames(EmailVm);
                 _resultModel.Success = true;
                 _resultModel.Data = new ListModel<ReportDto>(EmailVm, data.Count());
                 byte[] content = ExportUtility.ExportToExcel(EmailVm);

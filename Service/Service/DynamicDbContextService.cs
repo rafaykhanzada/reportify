@@ -6,7 +6,9 @@ using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json;
 using Service.IService;
 using System.Data;
+using System.Reflection.PortableExecutable;
 using System.Text.Json;
+using static Microsoft.EntityFrameworkCore.DbLoggerCategory.Database;
 
 namespace Service.Service
 {
@@ -472,6 +474,40 @@ namespace Service.Service
                 _resultModel.Success= true;
                 return _resultModel;
             }
+        }public async Task<ResultModel> GetTableColumnsAsync(string connectionString, string tableName)
+        {
+            // Build the connection string dynamically
+            // Use DbContextOptionsBuilder to configure a dynamic DbContext
+            var optionsBuilder = new DbContextOptionsBuilder<DynamicDbContext>();
+            optionsBuilder.UseSqlServer(connectionString);
+
+            using (var context = new DynamicDbContext(optionsBuilder.Options))
+            {
+                // Fetch columns only for the selected table
+                var columns = await context.Columns
+                    .FromSqlRaw(@"
+                SELECT 
+                    COLUMN_NAME AS ColumnName,
+                    DATA_TYPE AS DataType,
+                    IS_NULLABLE AS IsNullable,
+                    CHARACTER_MAXIMUM_LENGTH AS MaxLength
+                FROM 
+                    INFORMATION_SCHEMA.COLUMNS
+                WHERE 
+                    TABLE_NAME = {0}", tableName) // Prevent SQL Injection
+                    .Select(c => new ColumnDetailsDto
+                    {
+                        ColumnName = c.ColumnName,
+                        DataType = c.DataType,
+                        IsNullable = c.IsNullable,
+                        CharacterMaximumLength = c.MaxLength
+                    })
+                    .ToListAsync();
+
+                _resultModel.Data= columns;
+                _resultModel.Success= true;
+                return _resultModel;
+            }
         }
         public async Task<ResultModel> GetProcedureParametersAsync(string server, string database, string username, string password, string trustCertificate, string procedureName)
         {
@@ -509,7 +545,77 @@ namespace Service.Service
                 return _resultModel;
             }
         }
-        public async Task<ResultModel> GetViewColumnsAsync(string server, string database, string username, string password, string trustCertificate, string viewName)
+
+        public async Task<ResultModel> GetStoredProcedureColumnsAsync(string connectionString, string spName)
+        {
+            // Initialize the result model
+            var resultModel = new ResultModel();
+
+            // Fix: Use the correct type for the list
+            var columns = new List<DynamicDbSchema>();
+
+            try
+            {
+                await using var connection = new SqlConnection(connectionString);
+                await connection.OpenAsync();
+
+                await using var command = new SqlCommand("sys.sp_describe_first_result_set", connection)
+                {
+                    CommandType = CommandType.StoredProcedure
+                };
+
+                command.Parameters.Add(new SqlParameter("@tsql", SqlDbType.NVarChar)
+                {
+                    Value = $"EXEC {spName}"
+                });
+                command.Parameters.Add(new SqlParameter("@params", SqlDbType.NVarChar)
+                {
+                    Value = DBNull.Value
+                });
+                command.Parameters.Add(new SqlParameter("@browse_information_mode", SqlDbType.TinyInt)
+                {
+                    Value = 0
+                });
+
+                await using var reader = await command.ExecuteReaderAsync();
+
+                while (await reader.ReadAsync())
+                {
+                    // Fix: Read safely from the SqlDataReader and map the specific 
+                    // column names returned by 'sys.sp_describe_first_result_set'
+                    columns.Add(new DynamicDbSchema
+                    {
+                        ColumnName = reader["name"] as string,
+                        ColumnOrdinal = reader["column_ordinal"] == DBNull.Value ? null : Convert.ToInt32(reader["column_ordinal"]),
+                        ColumnSize = reader["max_length"] == DBNull.Value ? null : Convert.ToInt32(reader["max_length"]),
+                        NumericPrecision = reader["precision"] == DBNull.Value ? null : Convert.ToInt32(reader["precision"]),
+                        IsUnique = reader["is_part_of_unique_key"] == DBNull.Value ? null : Convert.ToBoolean(reader["is_part_of_unique_key"]),
+                        DataType = reader["system_type_name"] as string,
+                        AllowDBNull = reader["is_nullable"] == DBNull.Value ? null : Convert.ToBoolean(reader["is_nullable"]),
+                        ProviderType = reader["system_type_id"] == DBNull.Value ? null : Convert.ToInt32(reader["system_type_id"]),
+                        IsIdentity = reader["is_identity_column"] == DBNull.Value ? null : Convert.ToBoolean(reader["is_identity_column"]),
+                        IsAutoIncrement = reader["is_identity_column"] == DBNull.Value ? null : Convert.ToBoolean(reader["is_identity_column"]),
+                        IsColumnSet = reader["is_sparse_column_set"] == DBNull.Value ? null : Convert.ToBoolean(reader["is_sparse_column_set"]),
+                    });
+                }
+
+                resultModel.Data = columns;
+                resultModel.Success = true;
+            }
+            catch (SqlException ex)
+            {
+                resultModel.Success = false;
+                resultModel.Message = $"SQL Error: {ex.Message}";
+            }
+            catch (Exception ex)
+            {
+                resultModel.Success = false;
+                resultModel.Message = $"Error: {ex.Message}";
+            }
+
+            return resultModel;
+        }
+    public async Task<ResultModel> GetViewColumnsAsync(string server, string database, string username, string password, string trustCertificate, string viewName)
         {
             // Build the connection string dynamically
             var connectionString = $"Server={server};Database={database};User Id={username};Password={password};TrustServerCertificate={trustCertificate};";
